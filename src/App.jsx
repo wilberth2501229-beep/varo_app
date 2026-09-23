@@ -159,35 +159,37 @@ function App() {
       </div>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around items-center h-20">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-cream-50 border-t border-bronze-200 flex justify-around items-center h-20">
         {[
-          { id: 'dashboard', label: '📊', icon: '📊' },
-          { id: 'transactions', label: '💳', icon: '💳' },
-          { id: 'cashflow', label: '💰', icon: '💰' },
-          { id: 'settings', label: '⚙️', icon: '⚙️' },
-          { id: 'logout', label: '🚪', icon: '🚪' },
+          { id: 'dashboard', label: 'Dashboard', icon: '▤' },
+          { id: 'transactions', label: 'Transacciones', icon: '∿' },
+          { id: 'cashflow', label: 'Flujo', icon: '▪' },
+          { id: 'settings', label: 'Config', icon: '⚙' },
+          { id: 'logout', label: 'Salir', icon: '⊗' },
         ].map((item) => (
           item.id === 'logout' ? (
             <button
               key={item.id}
               onClick={handleLogout}
-              className="flex flex-col items-center justify-center py-2 px-4 text-red-600 hover:bg-red-50 rounded-lg transition text-2xl"
+              className="flex flex-col items-center justify-center py-2 px-3 text-burgundy-700 hover:bg-burgundy-50 rounded-lg transition text-lg font-semibold"
               title="Cerrar sesión"
             >
-              {item.icon}
+              <span className="text-xl mb-1">{item.icon}</span>
+              <span className="text-xs">Salir</span>
             </button>
           ) : (
             <button
               key={item.id}
               onClick={() => useUiStore.setState({ activeTab: item.id })}
-              className={`flex flex-col items-center justify-center py-2 px-4 rounded-lg transition text-2xl ${
+              className={`flex flex-col items-center justify-center py-2 px-3 rounded-lg transition ${
                 activeTab === item.id
-                  ? 'text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:bg-gray-100'
+                  ? 'text-gold-600 bg-gold-50 font-semibold'
+                  : 'text-charcoal-600 hover:bg-bronze-100'
               }`}
               title={item.label}
             >
-              {item.icon}
+              <span className="text-xl mb-1">{item.icon}</span>
+              <span className="text-xs">{item.label}</span>
             </button>
           )
         ))}
