@@ -55,10 +55,12 @@ export default function TransactionScheduler({ onSuccess, editingTransaction = n
     setError(null)
 
     try {
+      const today = new Date().toISOString().split('T')[0]
       const payload = {
         ...form,
         account_id: selectedAccountId,
         amount: parseFloat(form.amount),
+        start_date: editingTransaction?.start_date || today,
       }
 
       let result
