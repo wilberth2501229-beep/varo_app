@@ -93,15 +93,15 @@ export default function TransactionScheduler({ onSuccess, editingTransaction = n
   }
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-xl font-bold mb-4">
+    <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+      <h2 className="text-lg sm:text-xl font-bold mb-4">
         {editingTransaction ? 'Editar Transacción' : 'Nueva Transacción Programada'}
       </h2>
 
-      {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4">{error}</div>}
+      {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm">{error}</div>}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">Descripción</label>
             <input
@@ -130,7 +130,7 @@ export default function TransactionScheduler({ onSuccess, editingTransaction = n
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">Tipo</label>
             <select
@@ -161,7 +161,7 @@ export default function TransactionScheduler({ onSuccess, editingTransaction = n
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">Categoría</label>
             <select

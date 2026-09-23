@@ -73,32 +73,32 @@ export default function CashFlow() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">💰 Flujo de Caja</h1>
-              <p className="text-sm text-gray-500 mt-1">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex-1">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">💰 Flujo de Caja</h1>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">
                 Gestiona tu flujo de caja y proyecciones financieras
               </p>
             </div>
             <button
               onClick={handleRefresh}
               disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+              className="w-full sm:w-auto px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 text-sm whitespace-nowrap"
             >
               {loading ? '🔄 Actualizando...' : '🔄 Actualizar'}
             </button>
           </div>
           {lastUpdated && (
-            <p className="text-xs text-gray-500 mt-2">Última actualización: {lastUpdated}</p>
+            <p className="text-xs text-gray-500 mt-3 sm:mt-2">Última actualización: {lastUpdated}</p>
           )}
         </div>
       </div>
 
       {/* Tabs Navigation */}
-      <div className="bg-white border-b sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex gap-8">
+      <div className="bg-white border-b sticky top-0 z-10 overflow-x-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex gap-2 sm:gap-6 min-w-max sm:min-w-0">
             {[
               { id: 'overview', label: '📊 Resumen', icon: '📊' },
               { id: 'projections', label: '📈 Proyecciones', icon: '📈' },
@@ -109,13 +109,14 @@ export default function CashFlow() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
+                className={`py-3 sm:py-4 px-2 sm:px-3 border-b-2 font-medium text-xs sm:text-sm transition-colors whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-gray-600 hover:text-gray-900'
                 }`}
               >
-                {tab.label}
+                <span className="sm:hidden">{tab.icon}</span>
+                <span className="hidden sm:inline">{tab.label}</span>
               </button>
             ))}
           </div>
@@ -123,17 +124,17 @@ export default function CashFlow() {
       </div>
 
       {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {/* Overview Tab */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-xl font-bold mb-4">Métricas Financieras</h2>
+              <h2 className="text-lg sm:text-xl font-bold mb-4">Métricas Financieras</h2>
               <FinancialMetrics />
             </div>
 
-            <div className="grid grid-cols-3 gap-6">
-              <div className="col-span-2">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+              <div className="lg:col-span-2">
                 <AlertsPanel />
               </div>
               <div>
@@ -145,12 +146,14 @@ export default function CashFlow() {
 
         {/* Projections Tab */}
         {activeTab === 'projections' && (
-          <div className="space-y-6">
-            <CashFlowChart period="year" />
+          <div className="space-y-4 sm:space-y-6">
+            <div className="overflow-x-auto">
+              <CashFlowChart period="year" />
+            </div>
 
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-bold mb-4">Períodos Disponibles</h2>
-              <div className="grid grid-cols-4 gap-4">
+            <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+              <h2 className="text-base sm:text-lg font-bold mb-4">Períodos Disponibles</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 {[
                   { period: 'month', label: 'Próximo Mes' },
                   { period: 'quarter', label: 'Próximo Trimestre' },
@@ -158,7 +161,7 @@ export default function CashFlow() {
                 ].map((p) => (
                   <button
                     key={p.period}
-                    className="px-4 py-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-medium"
+                    className="px-4 py-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-medium text-sm"
                   >
                     {p.label}
                   </button>
@@ -170,15 +173,16 @@ export default function CashFlow() {
 
         {/* Transactions Tab */}
         {activeTab === 'transactions' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <h3 className="text-lg font-bold mb-4">➕ Nueva Transacción</h3>
+          <div className="space-y-4 sm:space-y-6">
+            <div>
+              <h3 className="text-base sm:text-lg font-bold mb-4">➕ Nueva Transacción</h3>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 <TransactionScheduler onSuccess={handleRefresh} />
               </div>
-              <div />
             </div>
-            <ScheduledTransactionList />
+            <div className="overflow-x-auto">
+              <ScheduledTransactionList />
+            </div>
           </div>
         )}
 
@@ -192,11 +196,11 @@ export default function CashFlow() {
 
         {/* Settings Tab */}
         {activeTab === 'settings' && (
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             <LiquidityThresholdSetting />
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-bold mb-4">ℹ️ Información</h2>
-              <div className="space-y-4 text-sm text-gray-600">
+            <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-4">ℹ️ Información</h2>
+              <div className="space-y-3 sm:space-y-4 text-xs sm:text-sm text-gray-600">
                 <p>
                   <strong>Flujo de Caja:</strong> Sistema de proyección y análisis de liquidez para tu cuenta.
                 </p>

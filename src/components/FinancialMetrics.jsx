@@ -32,7 +32,7 @@ export default function FinancialMetrics() {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
       {/* Ingresos */}
       <div className="bg-green-50 rounded-lg shadow p-4 border-l-4 border-green-500">
         <p className="text-xs text-gray-600 uppercase">Ingresos Totales</p>
@@ -77,9 +77,9 @@ export default function FinancialMetrics() {
       </div>
 
       {/* Ahorros Acumulados */}
-      <div className="bg-lime-50 rounded-lg shadow p-4 border-l-4 border-lime-500 col-span-2">
+      <div className="bg-lime-50 rounded-lg shadow p-4 border-l-4 border-lime-500 sm:col-span-2 lg:col-span-3">
         <p className="text-xs text-gray-600 uppercase">Ahorros Acumulados (12 meses)</p>
-        <p className="text-3xl font-bold text-lime-600">${parseFloat(metrics.accumulatedSavings).toFixed(2)}</p>
+        <p className="text-2xl sm:text-3xl font-bold text-lime-600">${parseFloat(metrics.accumulatedSavings).toFixed(2)}</p>
       </div>
     </div>
   )
