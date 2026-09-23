@@ -6,6 +6,7 @@ export default function Sidebar({ onLogout }) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
     { id: 'transactions', label: 'Transacciones', icon: '💳' },
+    { id: 'cashflow', label: 'Flujo de Caja', icon: '💰' },
     { id: 'budgets', label: 'Presupuestos', icon: '💼' },
     { id: 'analytics', label: 'Análisis', icon: '📈' },
     { id: 'settings', label: 'Configuración', icon: '⚙️' },

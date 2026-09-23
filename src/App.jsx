@@ -14,6 +14,7 @@ import Notification from './components/Common/Notification'
 import Spinner from './components/Common/Spinner'
 import AuthLayout from './components/Auth/AuthLayout'
 import AccountSettings from './components/Settings/AccountSettings'
+import CashFlow from './pages/CashFlow'
 import * as transactionService from './services/transactionService'
 import * as authService from './services/authService'
 import './App.css'
@@ -99,6 +100,8 @@ function App() {
         )
       case 'transactions':
         return <TransactionList />
+      case 'cashflow':
+        return <CashFlow />
       case 'budgets':
         return (
           <div className="bg-white rounded-lg shadow-lg p-6 text-center">
