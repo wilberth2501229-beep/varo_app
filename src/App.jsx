@@ -144,16 +144,54 @@ function App() {
 
   // Mostrar dashboard si está autenticado
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header />
 
-      <div className="flex">
-        <Sidebar onLogout={handleLogout} />
+      {/* Desktop layout: Sidebar + Main */}
+      <div className="flex flex-1">
+        <div className="hidden lg:block">
+          <Sidebar onLogout={handleLogout} />
+        </div>
 
-        <main className="flex-1 p-8">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8">
           {renderContent()}
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around items-center h-20">
+        {[
+          { id: 'dashboard', label: '📊', icon: '📊' },
+          { id: 'transactions', label: '💳', icon: '💳' },
+          { id: 'cashflow', label: '💰', icon: '💰' },
+          { id: 'settings', label: '⚙️', icon: '⚙️' },
+          { id: 'logout', label: '🚪', icon: '🚪' },
+        ].map((item) => (
+          item.id === 'logout' ? (
+            <button
+              key={item.id}
+              onClick={handleLogout}
+              className="flex flex-col items-center justify-center py-2 px-4 text-red-600 hover:bg-red-50 rounded-lg transition text-2xl"
+              title="Cerrar sesión"
+            >
+              {item.icon}
+            </button>
+          ) : (
+            <button
+              key={item.id}
+              onClick={() => useUiStore.setState({ activeTab: item.id })}
+              className={`flex flex-col items-center justify-center py-2 px-4 rounded-lg transition text-2xl ${
+                activeTab === item.id
+                  ? 'text-blue-600 bg-blue-50'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+              title={item.label}
+            >
+              {item.icon}
+            </button>
+          )
+        ))}
+      </nav>
 
       {/* Modal para agregar transacción */}
       <Modal
@@ -167,7 +205,7 @@ function App() {
       {/* Botón flotante para agregar transacción */}
       <button
         onClick={openFormModal}
-        className="fixed bottom-8 right-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg transition transform hover:scale-110"
+        className="fixed right-4 lg:right-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg transition transform hover:scale-110 lg:bottom-8 bottom-24"
         title="Agregar transacción"
       >
         <span className="text-2xl">➕</span>
