@@ -82,7 +82,7 @@ export async function getNotificationHistory(accountId, limit = 20) {
 }
 
 // Crear notificación de alerta de liquidez crítica
-export async function createCriticalLiquidityAlert(accountId, userId, projectedBalance, criticalDate) {
+export async function createCriticalLiquidityAlert(accountId, userId, projectedBalance, criticalDate, userEmail = null, accountName = null) {
   try {
     const notification = {
       account_id: accountId,
@@ -93,7 +93,19 @@ export async function createCriticalLiquidityAlert(accountId, userId, projectedB
       sent_at: new Date().toISOString()
     }
 
-    return await createNotification(notification)
+    const result = await createNotification(notification)
+
+    // Enviar email si está disponible
+    if (userEmail && accountName) {
+      try {
+        const { sendCriticalLiquidityAlert } = await import('./emailService.js')
+        await sendCriticalLiquidityAlert(userEmail, accountName, projectedBalance, criticalDate)
+      } catch (emailError) {
+        console.warn('Email notification failed (non-critical):', emailError)
+      }
+    }
+
+    return result
   } catch (error) {
     logSupabaseError(error)
     return { success: false, error: error.message }
@@ -101,7 +113,7 @@ export async function createCriticalLiquidityAlert(accountId, userId, projectedB
 }
 
 // Crear notificación de transacción programada próxima
-export async function createScheduledTransactionAlert(accountId, userId, transaction, daysUntil) {
+export async function createScheduledTransactionAlert(accountId, userId, transaction, daysUntil, userEmail = null, accountName = null) {
   try {
     const transactionType = transaction.type === 'income' ? 'Ingreso' : 'Gasto'
     const symbol = transaction.type === 'income' ? '+' : '-'
@@ -116,7 +128,26 @@ export async function createScheduledTransactionAlert(accountId, userId, transac
       sent_at: new Date().toISOString()
     }
 
-    return await createNotification(notification)
+    const result = await createNotification(notification)
+
+    // Enviar email si está disponible
+    if (userEmail && accountName) {
+      try {
+        const { sendScheduledTransactionAlert } = await import('./emailService.js')
+        await sendScheduledTransactionAlert(
+          userEmail,
+          accountName,
+          transaction.type,
+          transaction.description,
+          transaction.amount,
+          transaction.next_due_date
+        )
+      } catch (emailError) {
+        console.warn('Email notification failed (non-critical):', emailError)
+      }
+    }
+
+    return result
   } catch (error) {
     logSupabaseError(error)
     return { success: false, error: error.message }

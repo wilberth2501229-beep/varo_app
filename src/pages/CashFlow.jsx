@@ -10,29 +10,7 @@ import FinancialMetrics from '../components/FinancialMetrics'
 import NotificationsPanel from '../components/NotificationsPanel'
 import LiquidityThresholdSetting from '../components/LiquidityThresholdSetting'
 import AlertsPanel from '../components/AlertsPanel'
-
-// Para el componente auxiliar
-function ScheduledTransactionsList() {
-  const { scheduledTransactions } = useScheduledTransactionStore()
-
-  if (scheduledTransactions.length === 0) {
-    return <p className="text-gray-500 text-sm">Sin transacciones programadas</p>
-  }
-
-  return (
-    <div className="space-y-2 max-h-96 overflow-y-auto">
-      {scheduledTransactions.slice(0, 10).map((t) => (
-        <div key={t.id} className="border rounded p-2 text-xs">
-          <p className="font-semibold">{t.description}</p>
-          <p className={t.type === 'income' ? 'text-green-600' : 'text-red-600'}>
-            {t.type === 'income' ? '+' : '-'}${t.amount.toFixed(2)}
-          </p>
-          <p className="text-gray-500">{t.frequency}</p>
-        </div>
-      ))}
-    </div>
-  )
-}
+import ScheduledTransactionList from '../components/ScheduledTransactionList'
 
 export default function CashFlow() {
   const { selectedAccountId } = useAuthStore()
@@ -192,16 +170,15 @@ export default function CashFlow() {
 
         {/* Transactions Tab */}
         {activeTab === 'transactions' && (
-          <div className="grid grid-cols-3 gap-6">
-            <div className="col-span-2">
-              <TransactionScheduler onSuccess={handleRefresh} />
-            </div>
-            <div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="font-bold mb-4">📋 Próximas Transacciones</h3>
-                <ScheduledTransactionsList />
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <h3 className="text-lg font-bold mb-4">➕ Nueva Transacción</h3>
+                <TransactionScheduler onSuccess={handleRefresh} />
               </div>
+              <div />
             </div>
+            <ScheduledTransactionList />
           </div>
         )}
 
