@@ -7,7 +7,6 @@ const FREQUENCIES = [
   { value: 'weekly', label: 'Semanal' },
   { value: 'biweekly', label: 'Cada 2 semanas' },
   { value: 'monthly', label: 'Mensual' },
-  { value: 'quarterly', label: 'Trimestral' },
   { value: 'annual', label: 'Anual' },
 ]
 

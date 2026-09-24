@@ -6,12 +6,13 @@ import { create } from 'zustand'
 export const useCashFlowStore = create((set, get) => ({
   // Estado
   projections: [],
+  criticalBalance: 0,
   metrics: null,
   criticalWeeks: [],
   lastUpdated: null,
 
   // Acciones
-  setProjections: (projections) => {
+  setProjections: (projections, criticalBalance = 0) => {
     // Identificar semanas críticas
     const criticalWeeks = projections
       .filter((p) => p.is_critical)
@@ -19,6 +20,7 @@ export const useCashFlowStore = create((set, get) => ({
 
     set({
       projections,
+      criticalBalance,
       criticalWeeks,
       lastUpdated: new Date().toISOString(),
     })
@@ -38,17 +40,17 @@ export const useCashFlowStore = create((set, get) => ({
 
   // Getters
   getProjectionsByPeriod: (period = 'month') => {
+    const months = { month: 1, quarter: 3, year: 12 }[period]
     const projections = get().projections
-    if (projections.length === 0) return []
+    if (!months || projections.length === 0) return projections
 
-    if (period === 'month') {
-      return projections.slice(0, 4) // 4 semanas ≈ 1 mes
-    } else if (period === 'quarter') {
-      return projections.slice(0, 12) // 12 semanas ≈ 3 meses
-    } else if (period === 'year') {
-      return projections.slice(0, 52) // 52 semanas ≈ 1 año
-    }
-    return projections
+    const today = new Date()
+    const end = new Date(today.getFullYear(), today.getMonth() + months, today.getDate())
+    const y = end.getFullYear()
+    const m = String(end.getMonth() + 1).padStart(2, '0')
+    const d = String(end.getDate()).padStart(2, '0')
+    const endISO = `${y}-${m}-${d}`
+    return projections.filter((p) => p.week_start_date <= endISO)
   },
 
   getMinimumBalance: () => {

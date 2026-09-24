@@ -37,7 +37,7 @@ export default function CashFlow() {
         // Calcular proyecciones
         const projResult = await calculateCashFlowProjection(selectedAccountId, 12)
         if (projResult.success) {
-          setProjections(projResult.data)
+          setProjections(projResult.data, projResult.criticalBalance)
           // Guardar proyecciones en DB
           await saveCashFlowProjections(projResult.data)
         }
@@ -58,7 +58,7 @@ export default function CashFlow() {
     try {
       const projResult = await calculateCashFlowProjection(selectedAccountId, 12)
       if (projResult.success) {
-        setProjections(projResult.data)
+        setProjections(projResult.data, projResult.criticalBalance)
         await saveCashFlowProjections(projResult.data)
         setLastUpdated(new Date().toLocaleTimeString())
       }
@@ -146,29 +146,7 @@ export default function CashFlow() {
 
         {/* Projections Tab */}
         {activeTab === 'projections' && (
-          <div className="space-y-4 sm:space-y-6">
-            <div className="overflow-x-auto">
-              <CashFlowChart period="year" />
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-4 sm:p-6">
-              <h2 className="text-base sm:text-lg font-bold mb-4">Períodos Disponibles</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-                {[
-                  { period: 'month', label: 'Próximo Mes' },
-                  { period: 'quarter', label: 'Próximo Trimestre' },
-                  { period: 'year', label: 'Próximo Año' },
-                ].map((p) => (
-                  <button
-                    key={p.period}
-                    className="px-4 py-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-medium text-sm"
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+          <CashFlowChart />
         )}
 
         {/* Transactions Tab */}

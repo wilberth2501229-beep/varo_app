@@ -2,13 +2,12 @@ import { useEffect, useState } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { useCashFlowStore } from '../store/cashFlowStore'
 import { useScheduledTransactionStore } from '../store/scheduledTransactionStore'
-import { calculateCashFlowProjection } from '../services/cashFlowService'
-import { getScheduledTransactions } from '../services/scheduledTransactionService'
+import { formatCurrency } from '../utils/utils'
 
 export default function AlertsPanel() {
   const { selectedAccountId } = useAuthStore()
   const { projections } = useCashFlowStore()
-  const { liquidityThreshold, getUpcomingTransactions } = useScheduledTransactionStore()
+  const { getUpcomingTransactions } = useScheduledTransactionStore()
 
   const [alerts, setAlerts] = useState([])
   const [loading, setLoading] = useState(false)
@@ -28,7 +27,7 @@ export default function AlertsPanel() {
           id: 'liquidity-critical',
           type: 'critical_liquidity',
           title: '⚠️ Alerta de Liquidez Crítica',
-          message: `Saldo proyectado caerá a $${firstCritical.projected_balance.toFixed(2)} el ${firstCritical.week_start_date}`,
+          message: `Tu saldo proyectado bajará a ${formatCurrency(firstCritical.min_balance ?? firstCritical.projected_balance, 'MXN')} la semana del ${new Date(`${firstCritical.week_start_date}T00:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}`,
           severity: 'high',
         })
       }
