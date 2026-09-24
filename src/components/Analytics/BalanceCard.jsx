@@ -2,7 +2,8 @@ import { useTransactionStore } from '../../store/transactionStore'
 import { formatCurrency } from '../../utils/utils'
 
 export default function BalanceCard() {
-  const { transactions, getTotalIncome, getTotalExpenses } = useTransactionStore()
+  const { getPostedTransactions, getTotalIncome, getTotalExpenses } = useTransactionStore()
+  const transactions = getPostedTransactions()
 
   const totalIncome = getTotalIncome()
   const totalExpenses = getTotalExpenses()

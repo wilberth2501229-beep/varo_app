@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { useTransactionStore } from '../../store/transactionStore'
 import { useUiStore } from '../../store/uiStore'
 import { formatCurrency, formatDate, getTransactionColor } from '../../utils/utils'
+import { toLocalISODate } from '../../services/cashFlowService'
+
+const todayISO = () => toLocalISODate(new Date())
 import * as transactionService from '../../services/transactionService'
 
 const CATEGORIES = [
@@ -140,6 +143,14 @@ export default function TransactionList() {
                 <tr key={transaction.id} className="hover:bg-gray-50 transition">
                   <td className="px-6 py-4 text-sm text-gray-600">
                     {formatDate(transaction.transaction_date)}
+                    {transaction.transaction_date > todayISO() && (
+                      <span
+                        className="ml-2 px-2 py-0.5 rounded-full text-xs bg-gold-100 text-gold-800"
+                        title="Aún no cuenta en el balance; aparece en la proyección de flujo de caja"
+                      >
+                        Futura
+                      </span>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900">
                     {transaction.description || '(Sin descripción)'}

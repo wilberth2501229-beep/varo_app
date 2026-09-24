@@ -26,8 +26,13 @@ export function formatCurrency(amount, currency = 'MXN', locale = 'es-MX') {
  * @param {string} locale - Locale para formato (ej: 'es-MX', 'en-US')
  * @returns {string} Fecha formateada
  */
+// "YYYY-MM-DD" se interpreta como fecha local; new Date() la leería como UTC y en México mostraría el día anterior
+function toDate(date) {
+  return typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00`) : new Date(date)
+}
+
 export function formatDate(date, locale = 'es-MX') {
-  return new Date(date).toLocaleDateString(locale, {
+  return toDate(date).toLocaleDateString(locale, {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -40,7 +45,7 @@ export function formatDate(date, locale = 'es-MX') {
  * @returns {string} Fecha en formato corto
  */
 export function formatDateShort(date) {
-  const d = new Date(date)
+  const d = toDate(date)
   const month = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   const year = d.getFullYear()
