@@ -1,4 +1,14 @@
 import { create } from 'zustand'
+import { toLocalISODate } from '../services/cashFlowService'
+
+export const PROJECTION_PERIOD_MONTHS = { month: 1, quarter: 3, year: 12 }
+
+export function getPeriodEndISO(period) {
+  const months = PROJECTION_PERIOD_MONTHS[period]
+  if (!months) return null
+  const today = new Date()
+  return toLocalISODate(new Date(today.getFullYear(), today.getMonth() + months, today.getDate()))
+}
 
 /**
  * Store para manejar proyecciones de flujo de caja
@@ -6,21 +16,30 @@ import { create } from 'zustand'
 export const useCashFlowStore = create((set, get) => ({
   // Estado
   projections: [],
+  events: [],
+  startingBalance: 0,
+  registeredBalance: 0,
+  scheduledToDate: 0,
   criticalBalance: 0,
   metrics: null,
   criticalWeeks: [],
   lastUpdated: null,
 
   // Acciones
-  setProjections: (projections, criticalBalance = 0) => {
-    // Identificar semanas críticas
+  // `result` es la respuesta de calculateCashFlowProjection
+  setProjections: (result) => {
+    const projections = result.data
     const criticalWeeks = projections
       .filter((p) => p.is_critical)
       .map((p) => p.week_start_date)
 
     set({
       projections,
-      criticalBalance,
+      events: result.events ?? [],
+      startingBalance: result.startingBalance ?? 0,
+      registeredBalance: result.registeredBalance ?? 0,
+      scheduledToDate: result.scheduledToDate ?? 0,
+      criticalBalance: result.criticalBalance ?? 0,
       criticalWeeks,
       lastUpdated: new Date().toISOString(),
     })
@@ -40,17 +59,15 @@ export const useCashFlowStore = create((set, get) => ({
 
   // Getters
   getProjectionsByPeriod: (period = 'month') => {
-    const months = { month: 1, quarter: 3, year: 12 }[period]
+    const endISO = getPeriodEndISO(period)
     const projections = get().projections
-    if (!months || projections.length === 0) return projections
+    return endISO ? projections.filter((p) => p.week_start_date <= endISO) : projections
+  },
 
-    const today = new Date()
-    const end = new Date(today.getFullYear(), today.getMonth() + months, today.getDate())
-    const y = end.getFullYear()
-    const m = String(end.getMonth() + 1).padStart(2, '0')
-    const d = String(end.getDate()).padStart(2, '0')
-    const endISO = `${y}-${m}-${d}`
-    return projections.filter((p) => p.week_start_date <= endISO)
+  getEventsByPeriod: (period = 'month') => {
+    const endISO = getPeriodEndISO(period)
+    const events = get().events
+    return endISO ? events.filter((e) => e.date <= endISO) : events
   },
 
   getMinimumBalance: () => {

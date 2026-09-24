@@ -37,7 +37,7 @@ export default function AlertsPanel() {
       if (upcomingTransactions.length > 0) {
         upcomingTransactions.forEach((transaction) => {
           const daysUntil = Math.ceil(
-            (new Date(transaction.next_due_date) - new Date()) / (1000 * 60 * 60 * 24)
+            (new Date(`${transaction.next_due_date}T00:00:00`) - new Date(new Date().toDateString())) / (1000 * 60 * 60 * 24)
           )
           alertsArray.push({
             id: `transaction-${transaction.id}`,

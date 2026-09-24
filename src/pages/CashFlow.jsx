@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { useCashFlowStore } from '../store/cashFlowStore'
 import { useScheduledTransactionStore } from '../store/scheduledTransactionStore'
+import { useTransactionStore } from '../store/transactionStore'
 import { calculateCashFlowProjection, saveCashFlowProjections } from '../services/cashFlowService'
 import { getScheduledTransactions } from '../services/scheduledTransactionService'
 import TransactionScheduler from '../components/TransactionScheduler'
@@ -15,59 +16,47 @@ import ScheduledTransactionList from '../components/ScheduledTransactionList'
 export default function CashFlow() {
   const { selectedAccountId } = useAuthStore()
   const { setProjections } = useCashFlowStore()
-  const { setScheduledTransactions } = useScheduledTransactionStore()
+  const { scheduledTransactions, setScheduledTransactions } = useScheduledTransactionStore()
+  const transactions = useTransactionStore((state) => state.transactions)
 
   const [activeTab, setActiveTab] = useState('overview')
   const [loading, setLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState(null)
 
-  // Cargar datos al montar el componente
+  const loadScheduled = useCallback(async () => {
+    if (!selectedAccountId) return
+    const result = await getScheduledTransactions(selectedAccountId)
+    if (result.success) setScheduledTransactions(result.data)
+  }, [selectedAccountId, setScheduledTransactions])
+
+  useEffect(() => {
+    loadScheduled()
+  }, [loadScheduled])
+
+  // Recalcular cada vez que cambian los programados (alta, pausa, eliminación) o se registra un movimiento
   useEffect(() => {
     if (!selectedAccountId) return
+    let cancelled = false
 
-    const loadData = async () => {
+    const recalculate = async () => {
       setLoading(true)
-      try {
-        // Cargar transacciones programadas
-        const transResult = await getScheduledTransactions(selectedAccountId)
-        if (transResult.success) {
-          setScheduledTransactions(transResult.data)
-        }
-
-        // Calcular proyecciones
-        const projResult = await calculateCashFlowProjection(selectedAccountId, 12)
-        if (projResult.success) {
-          setProjections(projResult.data, projResult.criticalBalance)
-          // Guardar proyecciones en DB
-          await saveCashFlowProjections(projResult.data)
-        }
-
+      const result = await calculateCashFlowProjection(selectedAccountId, 12)
+      if (cancelled) return
+      if (result.success) {
+        setProjections(result)
         setLastUpdated(new Date().toLocaleTimeString())
-      } catch (error) {
-        console.error('Error cargando datos:', error)
-      } finally {
-        setLoading(false)
+        saveCashFlowProjections(result.data)
       }
-    }
-
-    loadData()
-  }, [selectedAccountId, setProjections, setScheduledTransactions])
-
-  const handleRefresh = async () => {
-    setLoading(true)
-    try {
-      const projResult = await calculateCashFlowProjection(selectedAccountId, 12)
-      if (projResult.success) {
-        setProjections(projResult.data, projResult.criticalBalance)
-        await saveCashFlowProjections(projResult.data)
-        setLastUpdated(new Date().toLocaleTimeString())
-      }
-    } catch (error) {
-      console.error('Error refrescando:', error)
-    } finally {
       setLoading(false)
     }
-  }
+
+    recalculate()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedAccountId, scheduledTransactions, transactions, setProjections])
+
+  const handleRefresh = loadScheduled
 
   return (
     <div className="min-h-screen bg-gray-50">

@@ -1,4 +1,10 @@
 import { create } from 'zustand'
+import { getNextOccurrence, toLocalISODate } from '../services/cashFlowService'
+
+const parseISODate = (iso) => {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
 
 /**
  * Store para manejar transacciones programadas
@@ -65,15 +71,19 @@ export const useScheduledTransactionStore = create((set, get) => ({
       .reduce((sum, t) => sum + t.amount, 0)
   },
 
+  // next_due_date es la primera fecha de la serie; aquí se calcula la próxima ocurrencia real
   getUpcomingTransactions: (days = 30) => {
-    const today = new Date()
-    const futureDate = new Date(today.getTime() + days * 24 * 60 * 60 * 1000)
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const limit = new Date(today.getFullYear(), today.getMonth(), today.getDate() + days)
 
     return get().scheduledTransactions
-      .filter((t) => {
-        const transDate = new Date(t.next_due_date)
-        return transDate >= today && transDate <= futureDate && t.is_active
+      .filter((t) => t.is_active)
+      .map((t) => {
+        const next = getNextOccurrence(t, today)
+        return next && { ...t, next_due_date: toLocalISODate(next) }
       })
-      .sort((a, b) => new Date(a.next_due_date) - new Date(b.next_due_date))
+      .filter((t) => t && parseISODate(t.next_due_date) <= limit)
+      .sort((a, b) => a.next_due_date.localeCompare(b.next_due_date))
   },
 }))

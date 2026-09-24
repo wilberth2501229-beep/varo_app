@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { useCashFlowStore } from '../store/cashFlowStore'
+import { useScheduledTransactionStore } from '../store/scheduledTransactionStore'
+import { useTransactionStore } from '../store/transactionStore'
 import { getFinancialMetrics } from '../services/cashFlowService'
 import { formatCurrency } from '../utils/utils'
 
@@ -29,6 +31,13 @@ function MetricCard({ label, value, detail, tone = 'neutral' }) {
 const money = (n) => formatCurrency(n, 'MXN')
 const percent = (n) => (n === null ? '—' : `${n.toFixed(1)}%`)
 
+function periodDetail(metrics, monthlyAverage, fromScheduled) {
+  const parts = []
+  if (fromScheduled > 0) parts.push(`${money(fromScheduled)} de programados`)
+  if (metrics.period !== 'month') parts.push(`Promedio mensual: ${money(monthlyAverage)}`)
+  return parts.join(' · ') || null
+}
+
 function formatPeriodRange(metrics) {
   const start = new Date(`${metrics.periodStart}T00:00:00`)
   const opts = { day: 'numeric', month: 'short', year: 'numeric' }
@@ -38,6 +47,8 @@ function formatPeriodRange(metrics) {
 export default function FinancialMetrics() {
   const { selectedAccountId } = useAuthStore()
   const { setMetrics, metrics } = useCashFlowStore()
+  const scheduledTransactions = useScheduledTransactionStore((state) => state.scheduledTransactions)
+  const transactions = useTransactionStore((state) => state.transactions)
   const [period, setPeriod] = useState('month')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -58,7 +69,7 @@ export default function FinancialMetrics() {
     }
 
     loadMetrics()
-  }, [selectedAccountId, period, setMetrics])
+  }, [selectedAccountId, period, scheduledTransactions, transactions, setMetrics])
 
   const periodLabel = PERIODS.find((p) => p.value === period).label.toLowerCase()
 
@@ -104,13 +115,13 @@ export default function FinancialMetrics() {
               <MetricCard
                 label={`Ingresos · ${periodLabel}`}
                 value={money(metrics.totalIncome)}
-                detail={metrics.period !== 'month' ? `Promedio mensual: ${money(metrics.avgMonthlyIncome)}` : null}
+                detail={periodDetail(metrics, metrics.avgMonthlyIncome, metrics.scheduledIncome)}
                 tone="positive"
               />
               <MetricCard
                 label={`Gastos · ${periodLabel}`}
                 value={money(metrics.totalExpenses)}
-                detail={metrics.period !== 'month' ? `Promedio mensual: ${money(metrics.avgMonthlyExpenses)}` : null}
+                detail={periodDetail(metrics, metrics.avgMonthlyExpenses, metrics.scheduledExpenses)}
                 tone="negative"
               />
               <MetricCard

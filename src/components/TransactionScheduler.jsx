@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { useScheduledTransactionStore } from '../store/scheduledTransactionStore'
 import { createScheduledTransaction, updateScheduledTransaction } from '../services/scheduledTransactionService'
+import { toLocalISODate } from '../services/cashFlowService'
 
 const FREQUENCIES = [
   { value: 'weekly', label: 'Semanal' },
-  { value: 'biweekly', label: 'Cada 2 semanas' },
+  { value: 'semimonthly', label: 'Quincenal (15 y fin de mes)' },
   { value: 'monthly', label: 'Mensual' },
   { value: 'annual', label: 'Anual' },
 ]
@@ -32,7 +33,7 @@ export default function TransactionScheduler({ onSuccess, editingTransaction = n
       type: 'expense',
       frequency: 'monthly',
       category: 'Otros',
-      next_due_date: new Date().toISOString().split('T')[0],
+      next_due_date: toLocalISODate(new Date()),
       is_active: true,
     }
   )
@@ -54,7 +55,7 @@ export default function TransactionScheduler({ onSuccess, editingTransaction = n
     setError(null)
 
     try {
-      const today = new Date().toISOString().split('T')[0]
+      const today = toLocalISODate(new Date())
       const payload = {
         ...form,
         account_id: selectedAccountId,
@@ -78,7 +79,7 @@ export default function TransactionScheduler({ onSuccess, editingTransaction = n
             type: 'expense',
             frequency: 'monthly',
             category: 'Otros',
-            next_due_date: new Date().toISOString().split('T')[0],
+            next_due_date: toLocalISODate(new Date()),
             is_active: true,
           })
         }
@@ -180,7 +181,7 @@ export default function TransactionScheduler({ onSuccess, editingTransaction = n
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Próxima fecha</label>
+            <label className="block text-sm font-medium mb-1">Primera fecha</label>
             <input
               type="date"
               name="next_due_date"

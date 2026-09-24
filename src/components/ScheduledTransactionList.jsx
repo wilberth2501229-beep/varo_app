@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { useScheduledTransactionStore } from '../store/scheduledTransactionStore'
 import { getScheduledTransactions, deleteScheduledTransaction, toggleScheduledTransaction } from '../services/scheduledTransactionService'
+import { getNextOccurrence } from '../services/cashFlowService'
+
+function formatNextDate(transaction) {
+  const next = getNextOccurrence(transaction)
+  return next ? next.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Finalizado'
+}
 
 export default function ScheduledTransactionList() {
   const { selectedAccountId } = useAuthStore()
@@ -77,6 +83,7 @@ export default function ScheduledTransactionList() {
     const labels = {
       weekly: 'Semanal',
       biweekly: 'Cada 2 semanas',
+      semimonthly: 'Quincenal',
       monthly: 'Mensual',
       quarterly: 'Trimestral',
       annual: 'Anual',
@@ -155,7 +162,7 @@ export default function ScheduledTransactionList() {
                     {getFrequencyLabel(transaction.frequency)}
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    {new Date(transaction.next_due_date).toLocaleDateString()}
+                    {formatNextDate(transaction)}
                   </td>
                   <td className="px-4 py-3">
                     {transaction.is_active ? (

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useCashFlowStore } from '../store/cashFlowStore'
+import { useCashFlowStore, getPeriodEndISO } from '../store/cashFlowStore'
 import { formatCurrency } from '../utils/utils'
 
 const PERIODS = [
@@ -8,8 +8,29 @@ const PERIODS = [
   { value: 'year', label: '12 meses' },
 ]
 
+const COLORS = {
+  line: '#B8956A',
+  income: '#2A3F35',
+  expense: '#8B4545',
+  grid: '#E8DCC9',
+  axis: '#8B8680',
+  paper: '#FAFAF8',
+}
+
 const M = { top: 20, right: 16, bottom: 36, left: 60 }
-const MIN_LABEL_GAP = 40
+const MIN_LABEL_GAP = 44
+const LIST_PREVIEW = 8
+
+const money = (n) => formatCurrency(n, 'MXN')
+const signedMoney = (n) => `${n >= 0 ? '+' : '−'}${money(Math.abs(n))}`
+const compactMoney = new Intl.NumberFormat('es-MX', {
+  style: 'currency',
+  currency: 'MXN',
+  notation: 'compact',
+  maximumFractionDigits: 1,
+})
+const parseDate = (iso) => new Date(`${iso}T00:00:00`)
+const shortDate = (iso) => parseDate(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
 
 // El SVG se dibuja al ancho real del contenedor para que el texto no se encoja en móvil
 function useContainerWidth() {
@@ -24,16 +45,6 @@ function useContainerWidth() {
   return [setNode, width]
 }
 
-const money = (n) => formatCurrency(n, 'MXN')
-const compactMoney = new Intl.NumberFormat('es-MX', {
-  style: 'currency',
-  currency: 'MXN',
-  notation: 'compact',
-  maximumFractionDigits: 1,
-})
-const parseDate = (iso) => new Date(`${iso}T00:00:00`)
-const shortDate = (iso) => parseDate(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
-
 function SummaryItem({ label, value, detail, danger }) {
   return (
     <div>
@@ -44,11 +55,28 @@ function SummaryItem({ label, value, detail, danger }) {
   )
 }
 
+function xTicks(startDate, endDate, period) {
+  const ticks = []
+  if (period === 'month') {
+    for (let d = new Date(startDate); d <= endDate; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7)) {
+      ticks.push({ date: d, text: d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) })
+    }
+    return ticks
+  }
+  for (let d = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1); d <= endDate; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+    ticks.push({ date: d, text: d.toLocaleDateString('es-MX', { month: 'short' }) })
+  }
+  return ticks
+}
+
 export default function CashFlowChart() {
   const [period, setPeriod] = useState('quarter')
+  const [showAll, setShowAll] = useState(false)
   const [chartRef, containerWidth] = useContainerWidth()
-  const { getProjectionsByPeriod, criticalBalance } = useCashFlowStore()
-  const weeks = getProjectionsByPeriod(period)
+  const { getEventsByPeriod, startingBalance, registeredBalance, scheduledToDate, criticalBalance, lastUpdated } =
+    useCashFlowStore()
+
+  const events = getEventsByPeriod(period)
   const W = containerWidth || 800
   const H = W < 500 ? 240 : 320
 
@@ -57,7 +85,10 @@ export default function CashFlowChart() {
       {PERIODS.map((p) => (
         <button
           key={p.value}
-          onClick={() => setPeriod(p.value)}
+          onClick={() => {
+            setPeriod(p.value)
+            setShowAll(false)
+          }}
           className={`px-3 sm:px-4 py-1.5 text-sm rounded-md transition ${
             period === p.value ? 'bg-gold-500 text-cream-50 font-medium' : 'text-charcoal-600 hover:bg-cream-200'
           }`}
@@ -68,24 +99,29 @@ export default function CashFlowChart() {
     </div>
   )
 
-  if (weeks.length === 0) {
+  if (!lastUpdated) {
     return (
       <div className="bg-cream-50 border border-bronze-200 rounded-lg p-6 space-y-4">
         {selector}
-        <p className="text-charcoal-500 text-center py-16">No hay proyecciones disponibles</p>
+        <p className="text-charcoal-500 text-center py-16">Calculando proyección...</p>
       </div>
     )
   }
 
-  const lowOf = (w) => w.min_balance ?? w.projected_balance
-  const first = weeks[0]
-  const startBalance = first.projected_balance - (first.income ?? 0) + (first.expenses ?? 0)
-  const endBalance = weeks[weeks.length - 1].projected_balance
-  const lowestWeek = weeks.reduce((low, w) => (lowOf(w) < lowOf(low) ? w : low), weeks[0])
-  const criticalCount = weeks.filter((w) => w.is_critical).length
+  const today = new Date()
+  const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const endISO = getPeriodEndISO(period)
+  const endDate = parseDate(endISO)
+
+  const endBalance = events.length ? events[events.length - 1].balance : startingBalance
+  const lowest = events.reduce(
+    (low, e) => (e.balance < low.balance ? e : low),
+    { balance: startingBalance, date: null }
+  )
+  const room = lowest.balance - criticalBalance
 
   // Escala Y: incluye el umbral para que su línea siempre sea visible
-  const values = [startBalance, criticalBalance, ...weeks.flatMap((w) => [w.projected_balance, lowOf(w)])]
+  const values = [startingBalance, criticalBalance, ...events.map((e) => e.balance)]
   const rawMin = Math.min(...values)
   const rawMax = Math.max(...values)
   const pad = (rawMax - rawMin || Math.abs(rawMax) || 1) * 0.1
@@ -94,27 +130,25 @@ export default function CashFlowChart() {
 
   const plotW = W - M.left - M.right
   const plotH = H - M.top - M.bottom
-  const x = (i) => M.left + (weeks.length === 1 ? plotW / 2 : (i / (weeks.length - 1)) * plotW)
+  const span = endDate - startDate || 1
+  const x = (date) => M.left + ((date - startDate) / span) * plotW
   const y = (v) => M.top + ((yMax - v) / (yMax - yMin)) * plotH
 
-  const linePoints = weeks.map((w, i) => `${x(i)},${y(w.projected_balance)}`).join(' ')
-  const gridValues = Array.from({ length: 5 }, (_, k) => yMin + ((yMax - yMin) * k) / 4)
+  // Línea escalonada: el saldo se mantiene hasta el día del movimiento y ahí sube o baja
+  const path = [
+    `M ${x(startDate)} ${y(startingBalance)}`,
+    ...events.map((e) => `H ${x(parseDate(e.date))} V ${y(e.balance)}`),
+    `H ${x(endDate)}`,
+  ].join(' ')
 
-  // Etiquetas del eje X: cada semana en "próximo mes", el inicio de cada mes en los demás
-  // y se descartan las que quedarían encimadas
-  const xLabels = weeks
-    .map((w, i) => ({ i, date: parseDate(w.week_start_date) }))
-    .filter(({ date }, idx, arr) => period === 'month' || idx === 0 || date.getMonth() !== arr[idx - 1].date.getMonth())
-    .reduce((kept, label) => {
-      const prev = kept[kept.length - 1]
-      return prev && x(label.i) - x(prev.i) < MIN_LABEL_GAP ? kept : [...kept, label]
-    }, [])
-    .map(({ i, date }) => ({
-      i,
-      text: period === 'month'
-        ? shortDate(weeks[i].week_start_date)
-        : date.toLocaleDateString('es-MX', { month: 'short' }),
-    }))
+  const gridValues = Array.from({ length: 5 }, (_, k) => yMin + ((yMax - yMin) * k) / 4)
+  const ticks = xTicks(startDate, endDate, period).reduce((kept, tick) => {
+    const prev = kept[kept.length - 1]
+    const minX = prev ? x(prev.date) : M.left - MIN_LABEL_GAP / 2
+    return x(tick.date) - minX < MIN_LABEL_GAP ? kept : [...kept, tick]
+  }, [])
+
+  const visibleEvents = showAll ? events : events.slice(0, LIST_PREVIEW)
 
   return (
     <div className="bg-cream-50 border border-bronze-200 rounded-lg p-4 sm:p-6 space-y-5">
@@ -124,90 +158,132 @@ export default function CashFlowChart() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <SummaryItem label="Saldo hoy" value={money(startBalance)} />
         <SummaryItem
-          label="Saldo al final"
-          value={money(endBalance)}
-          detail={`Semana del ${shortDate(weeks[weeks.length - 1].week_start_date)}`}
-          danger={endBalance < criticalBalance}
+          label="Saldo hoy"
+          value={money(startingBalance)}
+          detail={scheduledToDate !== 0 ? `Registrado ${money(registeredBalance)} ${scheduledToDate >= 0 ? '+' : '−'} programados ${money(Math.abs(scheduledToDate))}` : null}
+        />
+        <SummaryItem
+          label="Disponible para gastar hoy"
+          value={room > 0 ? money(room) : money(0)}
+          detail={
+            room >= 0
+              ? `Sin bajar de tu umbral de ${money(criticalBalance)} hasta el ${shortDate(endISO)}`
+              : `Te faltan ${money(-room)} para mantener tu umbral`
+          }
+          danger={room < 0}
         />
         <SummaryItem
           label="Saldo más bajo"
-          value={money(lowOf(lowestWeek))}
-          detail={`Semana del ${shortDate(lowestWeek.week_start_date)}`}
-          danger={lowOf(lowestWeek) < criticalBalance}
+          value={money(lowest.balance)}
+          detail={lowest.date ? `El ${shortDate(lowest.date)}` : 'Hoy'}
+          danger={lowest.balance < criticalBalance}
         />
         <SummaryItem
-          label="Semanas en riesgo"
-          value={`${criticalCount} de ${weeks.length}`}
-          detail={`Umbral: ${money(criticalBalance)}`}
-          danger={criticalCount > 0}
+          label="Saldo al final"
+          value={money(endBalance)}
+          detail={`Al ${shortDate(endISO)}`}
+          danger={endBalance < criticalBalance}
         />
       </div>
 
       <div ref={chartRef}>
-      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="block" role="img" aria-label="Gráfica de saldo proyectado por semana">
-        {gridValues.map((v) => (
-          <g key={v}>
-            <line x1={M.left} x2={W - M.right} y1={y(v)} y2={y(v)} stroke="#E8DCC9" />
-            <text x={M.left - 8} y={y(v)} textAnchor="end" dominantBaseline="middle" fontSize="11" fill="#8B8680">
-              {compactMoney.format(v)}
-            </text>
-          </g>
-        ))}
+        <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="block" role="img" aria-label="Gráfica de saldo proyectado con cada movimiento">
+          {/* Zona bajo el umbral */}
+          {y(criticalBalance) < M.top + plotH && (
+            <rect
+              x={M.left}
+              y={Math.max(M.top, y(criticalBalance))}
+              width={plotW}
+              height={M.top + plotH - Math.max(M.top, y(criticalBalance))}
+              fill={COLORS.expense}
+              opacity="0.06"
+            />
+          )}
 
-        {yMin < 0 && yMax > 0 && (
-          <line x1={M.left} x2={W - M.right} y1={y(0)} y2={y(0)} stroke="#A89968" strokeWidth="1" />
-        )}
-
-        <line
-          x1={M.left}
-          x2={W - M.right}
-          y1={y(criticalBalance)}
-          y2={y(criticalBalance)}
-          stroke="#8B4545"
-          strokeWidth="1.5"
-          strokeDasharray="6 4"
-        />
-        <text x={M.left + 6} y={y(criticalBalance) - 6} fontSize="11" fill="#8B4545">
-          Umbral crítico
-        </text>
-
-        <polyline points={linePoints} fill="none" stroke="#B8956A" strokeWidth="2.5" strokeLinejoin="round" />
-
-        {/* En semanas críticas, marca hasta dónde bajó el saldo antes del cierre */}
-        {weeks.map((w, i) =>
-          w.is_critical && lowOf(w) < w.projected_balance ? (
-            <g key={`low-${w.week_start_date}`}>
-              <line x1={x(i)} x2={x(i)} y1={y(w.projected_balance)} y2={y(lowOf(w))} stroke="#8B4545" strokeWidth="1.5" strokeDasharray="2 3" />
-              <circle cx={x(i)} cy={y(lowOf(w))} r="3.5" fill="#FAFAF8" stroke="#8B4545" strokeWidth="1.5" />
+          {gridValues.map((v) => (
+            <g key={v}>
+              <line x1={M.left} x2={W - M.right} y1={y(v)} y2={y(v)} stroke={COLORS.grid} />
+              <text x={M.left - 8} y={y(v)} textAnchor="end" dominantBaseline="middle" fontSize="11" fill={COLORS.axis}>
+                {compactMoney.format(v)}
+              </text>
             </g>
-          ) : null
-        )}
+          ))}
 
-        {weeks.map((w, i) => (
-          <circle key={w.week_start_date} cx={x(i)} cy={y(w.projected_balance)} r={w.is_critical ? 4.5 : 3} fill={w.is_critical ? '#8B4545' : '#B8956A'}>
-            <title>
-              {`Semana del ${shortDate(w.week_start_date)}\n` +
-                `Saldo al cierre: ${money(w.projected_balance)}\n` +
-                `Saldo más bajo: ${money(lowOf(w))}\n` +
-                `Ingresos: ${money(w.income ?? 0)} · Gastos: ${money(w.expenses ?? 0)}`}
-            </title>
-          </circle>
-        ))}
-
-        {xLabels.map(({ i, text }) => (
-          <text key={i} x={x(i)} y={H - M.bottom + 20} textAnchor="middle" fontSize="11" fill="#8B8680">
-            {text}
+          <line x1={M.left} x2={W - M.right} y1={y(criticalBalance)} y2={y(criticalBalance)} stroke={COLORS.expense} strokeWidth="1.5" strokeDasharray="6 4" />
+          <text x={M.left + 6} y={y(criticalBalance) - 6} fontSize="11" fill={COLORS.expense}>
+            Umbral {compactMoney.format(criticalBalance)}
           </text>
-        ))}
-      </svg>
+
+          <path d={path} fill="none" stroke={COLORS.line} strokeWidth="2.5" strokeLinejoin="round" />
+
+          <circle cx={x(startDate)} cy={y(startingBalance)} r="4" fill={COLORS.line}>
+            <title>{`Hoy\nSaldo: ${money(startingBalance)}`}</title>
+          </circle>
+
+          {events.map((e, i) => (
+            <circle
+              key={`${e.date}-${i}`}
+              cx={x(parseDate(e.date))}
+              cy={y(e.balance)}
+              r="3.5"
+              fill={e.balance < criticalBalance ? COLORS.paper : e.type === 'income' ? COLORS.income : COLORS.expense}
+              stroke={e.type === 'income' ? COLORS.income : COLORS.expense}
+              strokeWidth={e.balance < criticalBalance ? 2 : 0}
+            >
+              <title>{`${shortDate(e.date)} · ${e.description}\n${signedMoney(e.delta)}\nSaldo: ${money(e.balance)}`}</title>
+            </circle>
+          ))}
+
+          {ticks.map((t) => (
+            <text key={t.text + t.date.getTime()} x={x(t.date)} y={H - M.bottom + 20} textAnchor="middle" fontSize="11" fill={COLORS.axis}>
+              {t.text}
+            </text>
+          ))}
+        </svg>
+      </div>
+
+      <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-charcoal-500">
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-forest-700" /> Ingreso</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-burgundy-700" /> Gasto</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full border-2 border-burgundy-700" /> Saldo bajo el umbral</span>
+      </div>
+
+      {/* Lista de movimientos: en celular no hay cursor para ver el detalle de cada punto */}
+      <div>
+        <h3 className="text-lg mb-2">Próximos movimientos</h3>
+        {events.length === 0 ? (
+          <p className="text-sm text-charcoal-500">No hay transacciones programadas en este periodo.</p>
+        ) : (
+          <>
+            <ul className="divide-y divide-bronze-200 border-y border-bronze-200">
+              {visibleEvents.map((e, i) => (
+                <li key={`${e.date}-${i}`} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="text-charcoal-700 truncate">{e.description}</p>
+                    <p className="text-xs text-charcoal-500">{shortDate(e.date)}</p>
+                  </div>
+                  <div className="text-right shrink-0 tabular">
+                    <p className={e.type === 'income' ? 'text-forest-700' : 'text-burgundy-700'}>{signedMoney(e.delta)}</p>
+                    <p className={`text-xs ${e.balance < criticalBalance ? 'text-burgundy-700 font-medium' : 'text-charcoal-500'}`}>
+                      Saldo {money(e.balance)}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {events.length > LIST_PREVIEW && (
+              <button onClick={() => setShowAll(!showAll)} className="mt-2 text-sm text-gold-700 hover:text-gold-800 font-medium">
+                {showAll ? 'Ver menos' : `Ver todos (${events.length})`}
+              </button>
+            )}
+          </>
+        )}
       </div>
 
       <p className="text-xs text-charcoal-500">
-        Saldo al cierre de cada semana, según tus transacciones programadas activas. Los puntos en rojo marcan
-        semanas en las que el saldo baja del umbral crítico en algún momento; la línea punteada llega al saldo
-        más bajo de esa semana.
+        Los programados cuya fecha ya pasó este mes se cuentan como realizados en el saldo de hoy. No registres como
+        transacción un movimiento que ya tienes programado, o se contará dos veces.
       </p>
     </div>
   )
