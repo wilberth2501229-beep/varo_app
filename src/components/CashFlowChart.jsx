@@ -21,6 +21,8 @@ const COLORS = {
 const M = { top: 20, right: 16, bottom: 36, left: 60 }
 const MIN_LABEL_GAP = 44
 const LIST_PREVIEW = 8
+const HIT_RADIUS = 32
+const TOOLTIP_WIDTH = 236
 
 const money = (n) => formatCurrency(n, 'MXN')
 const signedMoney = (n) => `${n >= 0 ? '+' : '−'}${money(Math.abs(n))}`
@@ -56,6 +58,60 @@ function SummaryItem({ label, value, detail, danger }) {
   )
 }
 
+function PointTooltip({ point, chartWidth, criticalBalance, todayISO }) {
+  // Se centra sobre el punto sin salirse de la gráfica; si el punto está muy arriba, se muestra debajo
+  const left = Math.min(Math.max(point.cx - TOOLTIP_WIDTH / 2, 0), chartWidth - TOOLTIP_WIDTH)
+  const above = point.cy > 130
+  const style = {
+    left,
+    top: above ? point.cy - 14 : point.cy + 14,
+    width: TOOLTIP_WIDTH,
+    transform: above ? 'translateY(-100%)' : 'none',
+  }
+  const date = parseDate(point.date)
+  const weekday = date.toLocaleDateString('es-MX', { weekday: 'short' }).replace('.', '')
+  const dateLabel =
+    point.date === todayISO
+      ? 'Hoy'
+      : `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${shortDate(point.date)}`
+  const belowThreshold = point.balance < criticalBalance
+
+  return (
+    <div
+      role="tooltip"
+      style={style}
+      className="absolute z-10 pointer-events-none rounded-lg border border-bronze-300 bg-cream-50 shadow-lg px-3 py-2.5 text-sm"
+    >
+      {point.kind === 'start' ? (
+        <>
+          <p className="text-xs text-charcoal-500">Inicio de hoy</p>
+          <p className="font-medium text-charcoal-700 mt-0.5">Saldo {money(point.balance)}</p>
+          <p className="text-xs text-charcoal-500 mt-1">Antes de los movimientos de hoy</p>
+        </>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-2 text-xs text-charcoal-500">
+            <span className="whitespace-nowrap">{dateLabel}</span>
+            <span className="uppercase tracking-wide">{point.source === 'registered' ? 'Registrado' : 'Programado'}</span>
+          </div>
+          <p className="font-medium text-charcoal-700 mt-1 truncate">{point.description}</p>
+          <p className={`text-lg font-semibold tabular ${point.type === 'income' ? 'text-forest-700' : 'text-burgundy-700'}`}>
+            {signedMoney(point.delta)}
+          </p>
+          <div className="mt-1.5 pt-1.5 border-t border-bronze-200 flex justify-between text-xs text-charcoal-600 tabular">
+            <span>Saldo {money(point.before)}</span>
+            <span aria-hidden="true">→</span>
+            <span className={belowThreshold ? 'text-burgundy-700 font-medium' : 'font-medium'}>{money(point.balance)}</span>
+          </div>
+          {belowThreshold && (
+            <p className="text-xs text-burgundy-700 mt-1">Queda bajo tu umbral de {money(criticalBalance)}</p>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 function xTicks(startDate, endDate, period) {
   const ticks = []
   if (period === 'month') {
@@ -73,6 +129,7 @@ function xTicks(startDate, endDate, period) {
 export default function CashFlowChart() {
   const [period, setPeriod] = useState('quarter')
   const [showAll, setShowAll] = useState(false)
+  const [active, setActive] = useState(null)
   const [chartRef, containerWidth] = useContainerWidth()
   const {
     getEventsByPeriod,
@@ -96,6 +153,7 @@ export default function CashFlowChart() {
           onClick={() => {
             setPeriod(p.value)
             setShowAll(false)
+            setActive(null)
           }}
           className={`px-3 sm:px-4 py-1.5 text-sm rounded-md transition ${
             period === p.value ? 'bg-gold-500 text-cream-50 font-medium' : 'text-charcoal-600 hover:bg-cream-200'
@@ -159,6 +217,36 @@ export default function CashFlowChart() {
 
   const visibleEvents = showAll ? events : events.slice(0, LIST_PREVIEW)
 
+  // Puntos interactivos: el inicio de hoy y cada movimiento, con su posición en pantalla
+  const points = [
+    { kind: 'start', date: todayISO, balance: openingBalance, cx: x(startDate), cy: y(openingBalance) },
+    ...events.map((e, i) => ({
+      ...e,
+      kind: 'event',
+      before: i === 0 ? openingBalance : events[i - 1].balance,
+      cx: x(parseDate(e.date)),
+      cy: y(e.balance),
+    })),
+  ]
+  const activePoint = active === null ? null : points[active] ?? null
+
+  // Toma el punto más cercano al cursor (o al dedo) para no exigir atinarle a un círculo de 7px
+  const pickPoint = (evt) => {
+    const rect = evt.currentTarget.getBoundingClientRect()
+    const px = evt.clientX - rect.left
+    const py = evt.clientY - rect.top
+    let nearest = null
+    let nearestDist = HIT_RADIUS
+    points.forEach((p, i) => {
+      const dist = Math.hypot(p.cx - px, p.cy - py)
+      if (dist <= nearestDist) {
+        nearest = i
+        nearestDist = dist
+      }
+    })
+    setActive(nearest)
+  }
+
   return (
     <div className="bg-cream-50 border border-bronze-200 rounded-lg p-4 sm:p-6 space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -196,8 +284,19 @@ export default function CashFlowChart() {
         />
       </div>
 
-      <div ref={chartRef}>
-        <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="block" role="img" aria-label="Gráfica de saldo proyectado con cada movimiento">
+      <div ref={chartRef} className="relative">
+        <svg
+          width={W}
+          height={H}
+          viewBox={`0 0 ${W} ${H}`}
+          className="block"
+          style={{ cursor: activePoint ? 'pointer' : 'default', touchAction: 'pan-y' }}
+          role="img"
+          aria-label="Gráfica de saldo proyectado con cada movimiento"
+          onPointerMove={pickPoint}
+          onPointerDown={pickPoint}
+          onPointerLeave={(evt) => evt.pointerType === 'mouse' && setActive(null)}
+        >
           {/* Zona bajo el umbral */}
           {y(criticalBalance) < M.top + plotH && (
             <rect
@@ -226,9 +325,7 @@ export default function CashFlowChart() {
 
           <path d={path} fill="none" stroke={COLORS.line} strokeWidth="2.5" strokeLinejoin="round" />
 
-          <circle cx={x(startDate)} cy={y(openingBalance)} r="4" fill={COLORS.line}>
-            <title>{`Inicio de hoy\nSaldo: ${money(openingBalance)}`}</title>
-          </circle>
+          <circle cx={x(startDate)} cy={y(openingBalance)} r="4" fill={COLORS.line} />
 
           {events.map((e, i) => (
             <circle
@@ -239,10 +336,22 @@ export default function CashFlowChart() {
               fill={e.balance < criticalBalance ? COLORS.paper : e.type === 'income' ? COLORS.income : COLORS.expense}
               stroke={e.type === 'income' ? COLORS.income : COLORS.expense}
               strokeWidth={e.balance < criticalBalance ? 2 : 0}
-            >
-              <title>{`${shortDate(e.date)} · ${e.description}\n${signedMoney(e.delta)}\nSaldo: ${money(e.balance)}`}</title>
-            </circle>
+            />
           ))}
+
+          {activePoint && (
+            <g pointerEvents="none">
+              <line x1={activePoint.cx} x2={activePoint.cx} y1={M.top} y2={M.top + plotH} stroke={COLORS.axis} strokeDasharray="3 3" opacity="0.6" />
+              <circle
+                cx={activePoint.cx}
+                cy={activePoint.cy}
+                r="8"
+                fill="none"
+                strokeWidth="2"
+                stroke={activePoint.kind === 'start' ? COLORS.line : activePoint.type === 'income' ? COLORS.income : COLORS.expense}
+              />
+            </g>
+          )}
 
           {ticks.map((t) => (
             <text key={t.text + t.date.getTime()} x={x(t.date)} y={H - M.bottom + 20} textAnchor="middle" fontSize="11" fill={COLORS.axis}>
@@ -250,6 +359,10 @@ export default function CashFlowChart() {
             </text>
           ))}
         </svg>
+
+        {activePoint && (
+          <PointTooltip point={activePoint} chartWidth={W} criticalBalance={criticalBalance} todayISO={todayISO} />
+        )}
       </div>
 
       <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-charcoal-500">
