@@ -125,22 +125,54 @@ export function getNextOccurrence(scheduled, from = startOfToday()) {
 
 const round2 = (n) => Math.round(n * 100) / 100
 
-// Línea de tiempo pura (sin acceso a datos) para poder probarla de forma aislada
-export function buildCashFlowTimeline({ registeredBalance, scheduled, criticalBalance, today, months }) {
+function registeredEvent(t) {
+  return {
+    date: parseLocalDate(t.transaction_date),
+    delta: signedAmount(t),
+    type: t.type,
+    description: t.description || t.category || (t.type === 'income' ? 'Ingreso' : 'Gasto'),
+    source: 'registered',
+  }
+}
+
+// Mismo día: primero ingresos, para no marcar una baja que no ocurre si la quincena llega ese día
+const byDateIncomeFirst = (a, b) => a.date - b.date || (a.type === 'income' ? -1 : 0) - (b.type === 'income' ? -1 : 0)
+
+// Línea de tiempo pura (sin acceso a datos) para poder probarla de forma aislada.
+// `transactions` son las registradas manualmente (pasadas y futuras).
+export function buildCashFlowTimeline({ transactions, scheduled, criticalBalance, today, months }) {
   const horizonEnd = addMonths(today, months)
+  const todayISO = toLocalISODate(today)
+  const yesterday = addDays(today, -1)
 
-  const scheduledToDate = scheduledEvents(scheduled, null, today).reduce((sum, e) => sum + e.delta, 0)
-  const startingBalance = registeredBalance + scheduledToDate
+  const registeredBefore = transactions
+    .filter((t) => t.transaction_date < todayISO)
+    .reduce((sum, t) => sum + signedAmount(t), 0)
+  const scheduledBefore = scheduledEvents(scheduled, null, yesterday).reduce((sum, e) => sum + e.delta, 0)
+  const openingBalance = registeredBefore + scheduledBefore
 
-  let running = startingBalance
-  const events = scheduledEvents(scheduled, addDays(today, 1), horizonEnd).map((e) => {
-    running += e.delta
-    return { ...e, date: toLocalISODate(e.date), balance: round2(running) }
-  })
+  // Desde hoy: movimientos registrados y programados, cada uno en su fecha
+  let running = openingBalance
+  const events = [
+    ...transactions
+      .filter((t) => t.transaction_date >= todayISO && parseLocalDate(t.transaction_date) <= horizonEnd)
+      .map(registeredEvent),
+    ...scheduledEvents(scheduled, today, horizonEnd).map((e) => ({ ...e, source: 'scheduled' })),
+  ]
+    .sort(byDateIncomeFirst)
+    .map((e) => {
+      running += e.delta
+      return { ...e, date: toLocalISODate(e.date), balance: round2(running) }
+    })
+
+  const todaysEvents = events.filter((e) => e.date === todayISO)
+  const startingBalance = openingBalance + todaysEvents.reduce((sum, e) => sum + e.delta, 0)
+  const registeredBalance = registeredBefore + todaysEvents.filter((e) => e.source === 'registered').reduce((sum, e) => sum + e.delta, 0)
+  const scheduledToDate = startingBalance - registeredBalance
 
   // Resumen semanal (lo usan las alertas y la tabla cash_flow_projections)
   const weeks = []
-  let balance = startingBalance
+  let balance = openingBalance
   let i = 0
   for (let weekStart = today; weekStart <= horizonEnd; weekStart = addDays(weekStart, 7)) {
     const weekEndISO = toLocalISODate(addDays(weekStart, 6))
@@ -167,6 +199,7 @@ export function buildCashFlowTimeline({ registeredBalance, scheduled, criticalBa
   }
 
   return {
+    openingBalance: round2(openingBalance),
     registeredBalance: round2(registeredBalance),
     scheduledToDate: round2(scheduledToDate),
     startingBalance: round2(startingBalance),
@@ -192,11 +225,12 @@ export async function calculateCashFlowProjection(accountId, months = 12) {
   try {
     const today = startOfToday()
 
+    // Todas las registradas hasta el horizonte: las pasadas forman el saldo, las futuras son movimientos
     const { data: transactions, error: txError } = await supabase
       .from('transactions')
-      .select('type, amount')
+      .select('type, amount, transaction_date, description, category')
       .eq('account_id', accountId)
-      .lte('transaction_date', toLocalISODate(today))
+      .lte('transaction_date', toLocalISODate(addMonths(today, months)))
 
     if (txError) throw txError
 
@@ -210,16 +244,16 @@ export async function calculateCashFlowProjection(accountId, months = 12) {
 
     if (thresholdError) throw thresholdError
 
-    const registeredBalance = transactions.reduce((sum, t) => sum + signedAmount(t), 0)
     const criticalBalance = Number(threshold?.critical_balance ?? 0)
 
-    const timeline = buildCashFlowTimeline({ registeredBalance, scheduled, criticalBalance, today, months })
+    const timeline = buildCashFlowTimeline({ transactions, scheduled, criticalBalance, today, months })
 
     logSupabaseData(timeline, 'Proyecciones calculadas')
     return {
       success: true,
       data: timeline.weeks.map((week) => ({ account_id: accountId, ...week })),
       events: timeline.events,
+      openingBalance: timeline.openingBalance,
       startingBalance: timeline.startingBalance,
       registeredBalance: timeline.registeredBalance,
       scheduledToDate: timeline.scheduledToDate,

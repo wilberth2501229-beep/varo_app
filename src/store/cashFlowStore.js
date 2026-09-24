@@ -17,6 +17,7 @@ export const useCashFlowStore = create((set, get) => ({
   // Estado
   projections: [],
   events: [],
+  openingBalance: 0,
   startingBalance: 0,
   registeredBalance: 0,
   scheduledToDate: 0,
@@ -36,6 +37,7 @@ export const useCashFlowStore = create((set, get) => ({
     set({
       projections,
       events: result.events ?? [],
+      openingBalance: result.openingBalance ?? 0,
       startingBalance: result.startingBalance ?? 0,
       registeredBalance: result.registeredBalance ?? 0,
       scheduledToDate: result.scheduledToDate ?? 0,

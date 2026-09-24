@@ -15,6 +15,7 @@ import Spinner from './components/Common/Spinner'
 import AuthLayout from './components/Auth/AuthLayout'
 import AccountSettings from './components/Settings/AccountSettings'
 import CashFlow from './pages/CashFlow'
+import { useRealtimeSync } from './hooks/useRealtimeSync'
 import * as transactionService from './services/transactionService'
 import * as authService from './services/authService'
 import './App.css'
@@ -24,6 +25,8 @@ function App() {
   const { setTransactions } = useTransactionStore()
   const { user, setUser, setSession, setUserAccounts, setSelectedAccountId, clearAuth } = useAuthStore()
   const [initializing, setInitializing] = useState(true)
+  const selectedAccountId = useAuthStore((state) => state.selectedAccountId)
+  useRealtimeSync(user ? selectedAccountId : null)
 
   // Verificar autenticación al montar
   useEffect(() => {

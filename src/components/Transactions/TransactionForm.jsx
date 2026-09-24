@@ -3,6 +3,7 @@ import { useTransactionStore } from '../../store/transactionStore'
 import { useUiStore } from '../../store/uiStore'
 import { useAuthStore } from '../../store/authStore'
 import * as transactionService from '../../services/transactionService'
+import { toLocalISODate } from '../../services/cashFlowService'
 
 const CATEGORIES = [
   'Alimentación',
@@ -24,7 +25,7 @@ export default function TransactionForm({ onClose }) {
     amount: '',
     category: 'Otros',
     description: '',
-    transaction_date: new Date().toISOString().split('T')[0]
+    transaction_date: toLocalISODate(new Date())
   })
 
   const [loading, setLoading] = useState(false)
@@ -76,7 +77,7 @@ export default function TransactionForm({ onClose }) {
         amount: '',
         category: 'Otros',
         description: '',
-        transaction_date: new Date().toISOString().split('T')[0]
+        transaction_date: toLocalISODate(new Date())
       })
 
       // Cerrar modal

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useCashFlowStore, getPeriodEndISO } from '../store/cashFlowStore'
 import { formatCurrency } from '../utils/utils'
+import { toLocalISODate } from '../services/cashFlowService'
 
 const PERIODS = [
   { value: 'month', label: 'Próximo mes' },
@@ -73,8 +74,15 @@ export default function CashFlowChart() {
   const [period, setPeriod] = useState('quarter')
   const [showAll, setShowAll] = useState(false)
   const [chartRef, containerWidth] = useContainerWidth()
-  const { getEventsByPeriod, startingBalance, registeredBalance, scheduledToDate, criticalBalance, lastUpdated } =
-    useCashFlowStore()
+  const {
+    getEventsByPeriod,
+    openingBalance,
+    startingBalance,
+    registeredBalance,
+    scheduledToDate,
+    criticalBalance,
+    lastUpdated,
+  } = useCashFlowStore()
 
   const events = getEventsByPeriod(period)
   const W = containerWidth || 800
@@ -110,6 +118,7 @@ export default function CashFlowChart() {
 
   const today = new Date()
   const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const todayISO = toLocalISODate(startDate)
   const endISO = getPeriodEndISO(period)
   const endDate = parseDate(endISO)
 
@@ -121,7 +130,7 @@ export default function CashFlowChart() {
   const room = lowest.balance - criticalBalance
 
   // Escala Y: incluye el umbral para que su línea siempre sea visible
-  const values = [startingBalance, criticalBalance, ...events.map((e) => e.balance)]
+  const values = [openingBalance, startingBalance, criticalBalance, ...events.map((e) => e.balance)]
   const rawMin = Math.min(...values)
   const rawMax = Math.max(...values)
   const pad = (rawMax - rawMin || Math.abs(rawMax) || 1) * 0.1
@@ -134,9 +143,9 @@ export default function CashFlowChart() {
   const x = (date) => M.left + ((date - startDate) / span) * plotW
   const y = (v) => M.top + ((yMax - v) / (yMax - yMin)) * plotH
 
-  // Línea escalonada: el saldo se mantiene hasta el día del movimiento y ahí sube o baja
+  // Línea escalonada: parte del saldo al inicio de hoy; se mantiene hasta el día de cada movimiento y ahí sube o baja
   const path = [
-    `M ${x(startDate)} ${y(startingBalance)}`,
+    `M ${x(startDate)} ${y(openingBalance)}`,
     ...events.map((e) => `H ${x(parseDate(e.date))} V ${y(e.balance)}`),
     `H ${x(endDate)}`,
   ].join(' ')
@@ -217,8 +226,8 @@ export default function CashFlowChart() {
 
           <path d={path} fill="none" stroke={COLORS.line} strokeWidth="2.5" strokeLinejoin="round" />
 
-          <circle cx={x(startDate)} cy={y(startingBalance)} r="4" fill={COLORS.line}>
-            <title>{`Hoy\nSaldo: ${money(startingBalance)}`}</title>
+          <circle cx={x(startDate)} cy={y(openingBalance)} r="4" fill={COLORS.line}>
+            <title>{`Inicio de hoy\nSaldo: ${money(openingBalance)}`}</title>
           </circle>
 
           {events.map((e, i) => (
@@ -251,9 +260,9 @@ export default function CashFlowChart() {
 
       {/* Lista de movimientos: en celular no hay cursor para ver el detalle de cada punto */}
       <div>
-        <h3 className="text-lg mb-2">Próximos movimientos</h3>
+        <h3 className="text-lg mb-2">Movimientos desde hoy</h3>
         {events.length === 0 ? (
-          <p className="text-sm text-charcoal-500">No hay transacciones programadas en este periodo.</p>
+          <p className="text-sm text-charcoal-500">No hay movimientos en este periodo.</p>
         ) : (
           <>
             <ul className="divide-y divide-bronze-200 border-y border-bronze-200">
@@ -261,7 +270,9 @@ export default function CashFlowChart() {
                 <li key={`${e.date}-${i}`} className="flex items-center justify-between gap-3 py-2 text-sm">
                   <div className="min-w-0">
                     <p className="text-charcoal-700 truncate">{e.description}</p>
-                    <p className="text-xs text-charcoal-500">{shortDate(e.date)}</p>
+                    <p className="text-xs text-charcoal-500">
+                      {e.date === todayISO ? 'Hoy' : shortDate(e.date)} · {e.source === 'registered' ? 'Registrado' : 'Programado'}
+                    </p>
                   </div>
                   <div className="text-right shrink-0 tabular">
                     <p className={e.type === 'income' ? 'text-forest-700' : 'text-burgundy-700'}>{signedMoney(e.delta)}</p>
@@ -282,8 +293,9 @@ export default function CashFlowChart() {
       </div>
 
       <p className="text-xs text-charcoal-500">
-        Los programados cuya fecha ya pasó este mes se cuentan como realizados en el saldo de hoy. No registres como
-        transacción un movimiento que ya tienes programado, o se contará dos veces.
+        Incluye tus transacciones registradas (también las de fecha futura) y tus programados. Los programados cuya
+        fecha ya pasó este mes se cuentan como realizados. No registres como transacción un movimiento que ya tienes
+        programado, o se contará dos veces.
       </p>
     </div>
   )
