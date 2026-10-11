@@ -1,8 +1,8 @@
-import { useTransactionStore } from '../../store/transactionStore'
+import { useBalanceSummary } from '../../hooks/usePostedTransactions'
 import { formatCurrency } from '../../utils/utils'
 
 export default function Header() {
-  const { getTotalIncome, getTotalExpenses } = useTransactionStore()
+  const { income, expenses } = useBalanceSummary()
 
   return (
     <header className="bg-cream-50 border-b border-bronze-200 shadow-sm">
@@ -17,14 +17,14 @@ export default function Header() {
             <div className="flex-1 sm:flex-none">
               <p className="text-charcoal-600 text-xs font-semibold uppercase tracking-wide">Ingresos</p>
               <p className="text-2xl sm:text-3xl font-bold text-forest-700 mt-1">
-                {formatCurrency(getTotalIncome(), 'MXN')}
+                {formatCurrency(income, 'MXN')}
               </p>
             </div>
             <div className="w-px bg-bronze-300 hidden sm:block"></div>
             <div className="flex-1 sm:flex-none">
               <p className="text-charcoal-600 text-xs font-semibold uppercase tracking-wide">Egresos</p>
               <p className="text-2xl sm:text-3xl font-bold text-burgundy-700 mt-1">
-                {formatCurrency(getTotalExpenses(), 'MXN')}
+                {formatCurrency(expenses, 'MXN')}
               </p>
             </div>
           </div>

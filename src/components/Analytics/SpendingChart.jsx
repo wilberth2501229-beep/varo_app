@@ -1,10 +1,10 @@
-import { useTransactionStore } from '../../store/transactionStore'
+import { usePostedTransactions } from '../../hooks/usePostedTransactions'
 import { formatCurrency, groupByCategory } from '../../utils/utils'
 
 export default function SpendingChart() {
-  const { getPostedTransactions } = useTransactionStore()
+  const posted = usePostedTransactions()
 
-  const expenses = getPostedTransactions().filter(t => t.type === 'expense')
+  const expenses = posted.filter(t => t.type === 'expense')
   const categorySpending = groupByCategory(expenses)
 
   // Calcular total y porcentajes

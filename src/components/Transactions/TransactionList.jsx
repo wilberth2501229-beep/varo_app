@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTransactionStore } from '../../store/transactionStore'
 import { useUiStore } from '../../store/uiStore'
+import { useExecutedScheduled } from '../../hooks/usePostedTransactions'
 import { formatCurrency, formatDate, getTransactionColor } from '../../utils/utils'
 import { toLocalISODate } from '../../services/cashFlowService'
+import * as transactionService from '../../services/transactionService'
 
 const todayISO = () => toLocalISODate(new Date())
-import * as transactionService from '../../services/transactionService'
 
 const CATEGORIES = [
   'Todos',
@@ -19,7 +20,9 @@ const CATEGORIES = [
 ]
 
 export default function TransactionList() {
-  const { transactions, deleteTransaction } = useTransactionStore()
+  const { transactions: registered, deleteTransaction } = useTransactionStore()
+  const executedScheduled = useExecutedScheduled()
+  const transactions = useMemo(() => [...registered, ...executedScheduled], [registered, executedScheduled])
   const { showSuccess, showError } = useUiStore()
 
   const [filters, setFilters] = useState({
@@ -154,20 +157,32 @@ export default function TransactionList() {
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900">
                     {transaction.description || '(Sin descripción)'}
+                    {transaction.source === 'scheduled' && (
+                      <span
+                        className="ml-2 px-2 py-0.5 rounded-full text-xs bg-bronze-100 text-bronze-800"
+                        title="Se ejecutó automáticamente según tu programación y ya cuenta en tu balance"
+                      >
+                        Programada
+                      </span>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-600">
-                    {transaction.category}
+                    {transaction.category || '—'}
                   </td>
                   <td className={`px-6 py-4 text-sm font-semibold text-right ${getTransactionColor(transaction.type)}`}>
                     {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount, 'MXN')}
                   </td>
                   <td className="px-6 py-4 text-sm text-center">
-                    <button
-                      onClick={() => handleDelete(transaction.id)}
-                      className="text-red-600 hover:text-red-800 font-medium transition"
-                    >
-                      🗑️ Eliminar
-                    </button>
+                    {transaction.source === 'scheduled' ? (
+                      <span className="text-xs text-gray-400">Se gestiona en Flujo de Caja</span>
+                    ) : (
+                      <button
+                        onClick={() => handleDelete(transaction.id)}
+                        className="text-red-600 hover:text-red-800 font-medium transition"
+                      >
+                        🗑️ Eliminar
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

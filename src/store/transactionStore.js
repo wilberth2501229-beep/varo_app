@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { toLocalISODate } from '../services/cashFlowService'
 
 /**
  * Store global para manejar transacciones
@@ -63,25 +62,7 @@ export const useTransactionStore = create((set, get) => ({
     })
   },
 
-  // Getters - Estadísticas
-  // Solo las transacciones con fecha de hoy o anterior; las futuras aparecen en la proyección de flujo de caja
-  getPostedTransactions: () => {
-    const today = toLocalISODate(new Date())
-    return get().transactions.filter((t) => t.transaction_date <= today)
-  },
-
-  getTotalIncome: () => {
-    return get().getPostedTransactions()
-      .filter((t) => t.type === 'income')
-      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0)
-  },
-
-  getTotalExpenses: () => {
-    return get().getPostedTransactions()
-      .filter((t) => t.type === 'expense')
-      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0)
-  },
-
+  // Los totales del dinero real (registradas + programados ejecutados) viven en hooks/usePostedTransactions
   getTransactionsByCategory: () => {
     const transactions = get().transactions
     const byCategory = {}

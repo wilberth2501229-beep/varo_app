@@ -1,13 +1,8 @@
-import { useTransactionStore } from '../../store/transactionStore'
+import { useBalanceSummary } from '../../hooks/usePostedTransactions'
 import { formatCurrency } from '../../utils/utils'
 
 export default function BalanceCard() {
-  const { getPostedTransactions, getTotalIncome, getTotalExpenses } = useTransactionStore()
-  const transactions = getPostedTransactions()
-
-  const totalIncome = getTotalIncome()
-  const totalExpenses = getTotalExpenses()
-  const balance = totalIncome - totalExpenses
+  const { posted: transactions, income: totalIncome, expenses: totalExpenses, balance } = useBalanceSummary()
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

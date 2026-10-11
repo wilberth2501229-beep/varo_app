@@ -23,6 +23,9 @@ export function useRealtimeSync(accountId) {
       if (result.success) setScheduledTransactions(result.data || [])
     }
 
+    // Los programados ya ejecutados forman parte del balance y de la lista, en cualquier pantalla
+    reloadScheduled()
+
     const filter = `account_id=eq.${accountId}`
     const channel = supabase
       .channel(`account-sync-${accountId}`)

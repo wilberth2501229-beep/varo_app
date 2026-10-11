@@ -119,6 +119,28 @@ function scheduledEvents(scheduled, from, to) {
     .sort((a, b) => a.date - b.date)
 }
 
+// Ocurrencias de programados activos que ya les tocó ejecutarse (hasta hoy), con forma de transacción.
+// Son las mismas que el motor suma al saldo de hoy, para que la lista y el balance coincidan.
+export function executedScheduledTransactions(scheduled, today = startOfToday()) {
+  return scheduled
+    .filter((s) => s.is_active === true)
+    .flatMap((s) =>
+      expandOccurrences(s, countedSince(s), today).map((date) => {
+        const iso = toLocalISODate(date)
+        return {
+          id: `scheduled-${s.id}-${iso}`,
+          account_id: s.account_id,
+          type: s.type,
+          amount: Number(s.amount),
+          category: s.category,
+          description: describe(s),
+          transaction_date: iso,
+          source: 'scheduled',
+        }
+      })
+    )
+}
+
 export function getNextOccurrence(scheduled, from = startOfToday()) {
   return expandOccurrences(scheduled, from, addMonths(from, 13))[0] ?? null
 }
