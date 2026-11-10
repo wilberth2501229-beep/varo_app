@@ -23,7 +23,12 @@ export function useRealtimeSync(accountId) {
       if (result.success) setScheduledTransactions(result.data || [])
     }
 
-    // Los programados ya ejecutados forman parte del balance y de la lista, en cualquier pantalla
+    // Evita mezclar datos de la cuenta anterior mientras carga la nueva
+    setTransactions([])
+    setScheduledTransactions([])
+
+    // Carga inicial (y al cambiar de cuenta): los programados ya ejecutados forman parte del balance en cualquier pantalla
+    reloadTransactions()
     reloadScheduled()
 
     const filter = `account_id=eq.${accountId}`

@@ -243,9 +243,10 @@ async function fetchActiveScheduled(accountId) {
 }
 
 // Calcular proyecciones de flujo de caja
-export async function calculateCashFlowProjection(accountId, months = 12) {
+// `asOf` (YYYY-MM-DD) calcula el flujo como si hoy fuera esa fecha, para consultar situaciones pasadas
+export async function calculateCashFlowProjection(accountId, months = 12, asOf = null) {
   try {
-    const today = startOfToday()
+    const today = asOf ? parseLocalDate(asOf) : startOfToday()
 
     // Todas las registradas hasta el horizonte: las pasadas forman el saldo, las futuras son movimientos
     const { data: transactions, error: txError } = await supabase
@@ -274,6 +275,7 @@ export async function calculateCashFlowProjection(accountId, months = 12) {
     return {
       success: true,
       data: timeline.weeks.map((week) => ({ account_id: accountId, ...week })),
+      asOf: toLocalISODate(today),
       events: timeline.events,
       openingBalance: timeline.openingBalance,
       startingBalance: timeline.startingBalance,

@@ -3,11 +3,10 @@ import { toLocalISODate } from '../services/cashFlowService'
 
 export const PROJECTION_PERIOD_MONTHS = { month: 1, quarter: 3, year: 12 }
 
-export function getPeriodEndISO(period) {
+export function getPeriodEndISO(period, from = new Date()) {
   const months = PROJECTION_PERIOD_MONTHS[period]
   if (!months) return null
-  const today = new Date()
-  return toLocalISODate(new Date(today.getFullYear(), today.getMonth() + months, today.getDate()))
+  return toLocalISODate(new Date(from.getFullYear(), from.getMonth() + months, from.getDate()))
 }
 
 /**

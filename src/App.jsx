@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useUiStore } from './store/uiStore'
-import { useTransactionStore } from './store/transactionStore'
-import { useAuthStore } from './store/authStore'
+import { getStoredAccountId, useAuthStore } from './store/authStore'
 import Header from './components/Layout/Header'
 import Sidebar from './components/Layout/Sidebar'
 import BalanceCard from './components/Analytics/BalanceCard'
@@ -16,13 +15,11 @@ import AuthLayout from './components/Auth/AuthLayout'
 import AccountSettings from './components/Settings/AccountSettings'
 import CashFlow from './pages/CashFlow'
 import { useRealtimeSync } from './hooks/useRealtimeSync'
-import * as transactionService from './services/transactionService'
 import * as authService from './services/authService'
 import './App.css'
 
 function App() {
   const { isFormModalOpen, openFormModal, closeFormModal, activeTab, isLoading } = useUiStore()
-  const { setTransactions } = useTransactionStore()
   const { user, setUser, setSession, setUserAccounts, setSelectedAccountId, clearAuth } = useAuthStore()
   const [initializing, setInitializing] = useState(true)
   const selectedAccountId = useAuthStore((state) => state.selectedAccountId)
@@ -47,7 +44,11 @@ function App() {
             )
             if (accountsResult.success && accountsResult.data.length > 0) {
               setUserAccounts(accountsResult.data)
-              setSelectedAccountId(accountsResult.data[0].id)
+              // Última cuenta elegida; si no hay, la compartida contigo (la propia suele estar vacía); si no, la primera
+              const accounts = accountsResult.data
+              const preferred =
+                accounts.find((a) => a.id === getStoredAccountId()) ?? accounts.find((a) => a.is_shared) ?? accounts[0]
+              setSelectedAccountId(preferred.id)
             }
           }
         }
@@ -60,32 +61,6 @@ function App() {
 
     checkAuth()
   }, [setUser, setSession, setUserAccounts, setSelectedAccountId])
-
-  // Cargar transacciones cuando hay usuario y cuenta seleccionada
-  useEffect(() => {
-    const loadTransactions = async () => {
-      try {
-        // UUID de la cuenta de prueba (si no hay cuentas de usuario)
-        const TEST_ACCOUNT_ID = '550e8400-e29b-41d4-a716-446655440000'
-
-        const userAccounts = useAuthStore.getState().userAccounts
-        const selectedAccount = userAccounts.length > 0
-          ? (useAuthStore.getState().selectedAccountId || userAccounts[0].id)
-          : TEST_ACCOUNT_ID
-
-        const result = await transactionService.getTransactions(selectedAccount)
-        if (result.success) {
-          setTransactions(result.data || [])
-        }
-      } catch (error) {
-        console.error('Error loading transactions:', error)
-      }
-    }
-
-    if (!initializing) {
-      loadTransactions()
-    }
-  }, [initializing, setTransactions])
 
   const renderContent = () => {
     if (isLoading) {

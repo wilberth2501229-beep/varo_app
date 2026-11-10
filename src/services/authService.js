@@ -122,6 +122,9 @@ export async function createUserAccount(userId, accountName = 'Mi Cuenta') {
   }
 }
 
+// Los correos se guardan y comparan en minúsculas y sin espacios para que "Pareja@Mail.com" y "pareja@mail.com" coincidan
+const normalizeEmail = (email) => (email ?? '').trim().toLowerCase()
+
 // Obtener cuentas del usuario autenticado (propias + compartidas)
 export async function getUserAccounts(userId, userEmail) {
   try {
@@ -137,7 +140,7 @@ export async function getUserAccounts(userId, userEmail) {
     const { data: sharedAccounts, error: sharedError } = await supabase
       .from('accounts')
       .select('*')
-      .eq('shared_with_email', userEmail)
+      .eq('shared_with_email', normalizeEmail(userEmail))
 
     if (sharedError) throw sharedError
 
@@ -160,7 +163,7 @@ export async function shareAccountWithEmail(accountId, email) {
   try {
     const { data, error } = await supabase
       .from('accounts')
-      .update({ shared_with_email: email })
+      .update({ shared_with_email: normalizeEmail(email) })
       .eq('id', accountId)
       .select()
 

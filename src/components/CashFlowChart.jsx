@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useAuthStore } from '../store/authStore'
 import { useCashFlowStore, getPeriodEndISO } from '../store/cashFlowStore'
+import { useScheduledTransactionStore } from '../store/scheduledTransactionStore'
+import { useTransactionStore } from '../store/transactionStore'
 import { formatCurrency } from '../utils/utils'
-import { toLocalISODate } from '../services/cashFlowService'
+import { calculateCashFlowProjection, toLocalISODate } from '../services/cashFlowService'
 
 const PERIODS = [
   { value: 'month', label: 'Próximo mes' },
@@ -34,6 +37,14 @@ const compactMoney = new Intl.NumberFormat('es-MX', {
 })
 const parseDate = (iso) => new Date(`${iso}T00:00:00`)
 const shortDate = (iso) => parseDate(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+const longDate = (iso) => parseDate(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
+
+// Mueve una fecha ISO n meses sin desbordar (31 ene + 1 mes = 28 feb, no 3 mar)
+function shiftMonths(iso, n) {
+  const [y, m, d] = iso.split('-').map(Number)
+  const lastDay = new Date(y, m - 1 + n + 1, 0).getDate()
+  return toLocalISODate(new Date(y, m - 1 + n, Math.min(d, lastDay)))
+}
 
 // El SVG se dibuja al ancho real del contenedor para que el texto no se encoja en móvil
 function useContainerWidth() {
@@ -58,7 +69,7 @@ function SummaryItem({ label, value, detail, danger }) {
   )
 }
 
-function PointTooltip({ point, chartWidth, criticalBalance, todayISO }) {
+function PointTooltip({ point, chartWidth, criticalBalance, todayISO, live }) {
   // Se centra sobre el punto sin salirse de la gráfica; si el punto está muy arriba, se muestra debajo
   const left = Math.min(Math.max(point.cx - TOOLTIP_WIDTH / 2, 0), chartWidth - TOOLTIP_WIDTH)
   const above = point.cy > 130
@@ -84,9 +95,9 @@ function PointTooltip({ point, chartWidth, criticalBalance, todayISO }) {
     >
       {point.kind === 'start' ? (
         <>
-          <p className="text-xs text-charcoal-500">Inicio de hoy</p>
+          <p className="text-xs text-charcoal-500">{live ? 'Inicio de hoy' : `Inicio del ${longDate(point.date)}`}</p>
           <p className="font-medium text-charcoal-700 mt-0.5">Saldo {money(point.balance)}</p>
-          <p className="text-xs text-charcoal-500 mt-1">Antes de los movimientos de hoy</p>
+          <p className="text-xs text-charcoal-500 mt-1">Antes de los movimientos {live ? 'de hoy' : 'de ese día'}</p>
         </>
       ) : (
         <>
@@ -130,18 +141,41 @@ export default function CashFlowChart() {
   const [period, setPeriod] = useState('quarter')
   const [showAll, setShowAll] = useState(false)
   const [active, setActive] = useState(null)
+  const [asOf, setAsOf] = useState(null)
+  const [past, setPast] = useState(null)
   const [chartRef, containerWidth] = useContainerWidth()
-  const {
-    getEventsByPeriod,
-    openingBalance,
-    startingBalance,
-    registeredBalance,
-    scheduledToDate,
-    criticalBalance,
-    lastUpdated,
-  } = useCashFlowStore()
+  const selectedAccountId = useAuthStore((state) => state.selectedAccountId)
+  const transactions = useTransactionStore((state) => state.transactions)
+  const scheduledTransactions = useScheduledTransactionStore((state) => state.scheduledTransactions)
+  const store = useCashFlowStore()
 
-  const events = getEventsByPeriod(period)
+  const today = new Date()
+  const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const todayISO = toLocalISODate(todayDate)
+
+  // Consulta de una fecha pasada: se calcula aparte para no tocar el saldo de hoy, las alertas ni lo guardado
+  useEffect(() => {
+    if (!asOf || !selectedAccountId) return
+    let cancelled = false
+    calculateCashFlowProjection(selectedAccountId, 12, asOf).then((result) => {
+      if (!cancelled && result.success) setPast(result)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [asOf, selectedAccountId, transactions, scheduledTransactions])
+
+  const live = asOf === null
+  const view = live ? store : past?.asOf === asOf ? past : null
+  const startDate = live ? todayDate : parseDate(asOf)
+  const endISO = getPeriodEndISO(period, startDate)
+  const endDate = parseDate(endISO)
+
+  const goTo = (iso) => {
+    setAsOf(iso && iso < todayISO ? iso : null)
+    setActive(null)
+    setShowAll(false)
+  }
   const W = containerWidth || 800
   const H = W < 500 ? 240 : 320
 
@@ -165,20 +199,52 @@ export default function CashFlowChart() {
     </div>
   )
 
-  if (!lastUpdated) {
+  const timeControls = (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs text-charcoal-500 uppercase tracking-wide">Ver al</span>
+      <button
+        onClick={() => goTo(shiftMonths(asOf ?? todayISO, -1))}
+        aria-label="Un mes antes"
+        className="px-2.5 py-1 rounded-md border border-bronze-300 text-charcoal-600 hover:bg-cream-200"
+      >
+        ◀
+      </button>
+      <input
+        type="date"
+        value={asOf ?? todayISO}
+        max={todayISO}
+        onChange={(e) => goTo(e.target.value)}
+        aria-label="Fecha de consulta"
+        className="px-2 py-1 text-sm rounded-md border border-bronze-300 bg-cream-50 text-charcoal-700"
+      />
+      <button
+        onClick={() => goTo(shiftMonths(asOf, 1))}
+        disabled={live}
+        aria-label="Un mes después"
+        className="px-2.5 py-1 rounded-md border border-bronze-300 text-charcoal-600 hover:bg-cream-200 disabled:opacity-40 disabled:hover:bg-transparent"
+      >
+        ▶
+      </button>
+      {!live && (
+        <button onClick={() => goTo(null)} className="px-3 py-1 text-sm rounded-md bg-gold-500 text-cream-50 font-medium">
+          Volver a hoy
+        </button>
+      )}
+    </div>
+  )
+
+  if (live ? !store.lastUpdated : !view) {
     return (
       <div className="bg-cream-50 border border-bronze-200 rounded-lg p-6 space-y-4">
         {selector}
+        {timeControls}
         <p className="text-charcoal-500 text-center py-16">Calculando proyección...</p>
       </div>
     )
   }
 
-  const today = new Date()
-  const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-  const todayISO = toLocalISODate(startDate)
-  const endISO = getPeriodEndISO(period)
-  const endDate = parseDate(endISO)
+  const { openingBalance, startingBalance, registeredBalance, scheduledToDate, criticalBalance } = view
+  const events = live ? store.getEventsByPeriod(period) : view.events.filter((e) => e.date <= endISO)
 
   const endBalance = events.length ? events[events.length - 1].balance : startingBalance
   const lowest = events.reduce(
@@ -201,12 +267,25 @@ export default function CashFlowChart() {
   const x = (date) => M.left + ((date - startDate) / span) * plotW
   const y = (v) => M.top + ((yMax - v) / (yMax - yMin)) * plotH
 
-  // Línea escalonada: parte del saldo al inicio de hoy; se mantiene hasta el día de cada movimiento y ahí sube o baja
+  // Al mirar el pasado, lo ocurrido va en línea continua y lo que sigue después de hoy, punteado (proyección)
+  const splitAtToday = !live && todayISO < endISO
+  const solidEvents = splitAtToday ? events.filter((e) => e.date <= todayISO) : events
+  const dashedEvents = splitAtToday ? events.filter((e) => e.date > todayISO) : []
+  const solidEndBalance = solidEvents.length ? solidEvents[solidEvents.length - 1].balance : openingBalance
+
+  // Línea escalonada: parte del saldo al inicio del día; se mantiene hasta el día de cada movimiento y ahí sube o baja
   const path = [
     `M ${x(startDate)} ${y(openingBalance)}`,
-    ...events.map((e) => `H ${x(parseDate(e.date))} V ${y(e.balance)}`),
-    `H ${x(endDate)}`,
+    ...solidEvents.map((e) => `H ${x(parseDate(e.date))} V ${y(e.balance)}`),
+    `H ${splitAtToday ? x(todayDate) : x(endDate)}`,
   ].join(' ')
+  const dashedPath = splitAtToday
+    ? [
+        `M ${x(todayDate)} ${y(solidEndBalance)}`,
+        ...dashedEvents.map((e) => `H ${x(parseDate(e.date))} V ${y(e.balance)}`),
+        `H ${x(endDate)}`,
+      ].join(' ')
+    : null
 
   const gridValues = Array.from({ length: 5 }, (_, k) => yMin + ((yMax - yMin) * k) / 4)
   const ticks = xTicks(startDate, endDate, period).reduce((kept, tick) => {
@@ -219,7 +298,7 @@ export default function CashFlowChart() {
 
   // Puntos interactivos: el inicio de hoy y cada movimiento, con su posición en pantalla
   const points = [
-    { kind: 'start', date: todayISO, balance: openingBalance, cx: x(startDate), cy: y(openingBalance) },
+    { kind: 'start', date: toLocalISODate(startDate), balance: openingBalance, cx: x(startDate), cy: y(openingBalance) },
     ...events.map((e, i) => ({
       ...e,
       kind: 'event',
@@ -250,18 +329,28 @@ export default function CashFlowChart() {
   return (
     <div className="bg-cream-50 border border-bronze-200 rounded-lg p-4 sm:p-6 space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h2 className="text-xl">Proyección de saldo</h2>
+        <h2 className="text-xl">{live ? 'Proyección de saldo' : 'Flujo de caja al pasado'}</h2>
         {selector}
       </div>
 
+      {timeControls}
+
+      {!live && (
+        <p className="text-sm text-charcoal-600 bg-cream-100 border border-bronze-200 rounded-lg px-3 py-2">
+          Estás viendo tu flujo desde el <strong>{longDate(asOf)}</strong>. La línea continua es lo que ya ocurrió y la
+          punteada, lo que sigue después de hoy. Se reconstruye con tus registros actuales: no incluye transacciones
+          que hayas eliminado ni programados que creaste después de esa fecha.
+        </p>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <SummaryItem
-          label="Saldo hoy"
+          label={live ? 'Saldo hoy' : `Saldo al ${shortDate(asOf)}`}
           value={money(startingBalance)}
           detail={scheduledToDate !== 0 ? `Registrado ${money(registeredBalance)} ${scheduledToDate >= 0 ? '+' : '−'} programados ${money(Math.abs(scheduledToDate))}` : null}
         />
         <SummaryItem
-          label="Disponible para gastar hoy"
+          label={live ? 'Disponible para gastar hoy' : 'Margen sobre el umbral'}
           value={room > 0 ? money(room) : money(0)}
           detail={
             room >= 0
@@ -273,7 +362,7 @@ export default function CashFlowChart() {
         <SummaryItem
           label="Saldo más bajo"
           value={money(lowest.balance)}
-          detail={lowest.date ? `El ${shortDate(lowest.date)}` : 'Hoy'}
+          detail={lowest.date ? `El ${shortDate(lowest.date)}` : live ? 'Hoy' : 'Al inicio'}
           danger={lowest.balance < criticalBalance}
         />
         <SummaryItem
@@ -324,6 +413,15 @@ export default function CashFlowChart() {
           </text>
 
           <path d={path} fill="none" stroke={COLORS.line} strokeWidth="2.5" strokeLinejoin="round" />
+          {dashedPath && (
+            <path d={dashedPath} fill="none" stroke={COLORS.line} strokeWidth="2.5" strokeLinejoin="round" strokeDasharray="6 5" />
+          )}
+          {splitAtToday && (
+            <g pointerEvents="none">
+              <line x1={x(todayDate)} x2={x(todayDate)} y1={M.top} y2={M.top + plotH} stroke={COLORS.axis} strokeDasharray="2 4" />
+              <text x={x(todayDate) + 4} y={M.top + 10} fontSize="11" fill={COLORS.axis}>Hoy</text>
+            </g>
+          )}
 
           <circle cx={x(startDate)} cy={y(openingBalance)} r="4" fill={COLORS.line} />
 
@@ -361,7 +459,7 @@ export default function CashFlowChart() {
         </svg>
 
         {activePoint && (
-          <PointTooltip point={activePoint} chartWidth={W} criticalBalance={criticalBalance} todayISO={todayISO} />
+          <PointTooltip point={activePoint} chartWidth={W} criticalBalance={criticalBalance} todayISO={todayISO} live={live} />
         )}
       </div>
 
@@ -373,7 +471,7 @@ export default function CashFlowChart() {
 
       {/* Lista de movimientos: en celular no hay cursor para ver el detalle de cada punto */}
       <div>
-        <h3 className="text-lg mb-2">Movimientos desde hoy</h3>
+        <h3 className="text-lg mb-2">{live ? 'Movimientos desde hoy' : `Movimientos desde el ${shortDate(asOf)}`}</h3>
         {events.length === 0 ? (
           <p className="text-sm text-charcoal-500">No hay movimientos en este periodo.</p>
         ) : (
@@ -385,6 +483,7 @@ export default function CashFlowChart() {
                     <p className="text-charcoal-700 truncate">{e.description}</p>
                     <p className="text-xs text-charcoal-500">
                       {e.date === todayISO ? 'Hoy' : shortDate(e.date)} · {e.source === 'registered' ? 'Registrado' : 'Programado'}
+                      {!live && e.date > todayISO && ' · Proyección'}
                     </p>
                   </div>
                   <div className="text-right shrink-0 tabular">

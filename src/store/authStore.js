@@ -1,5 +1,23 @@
 import { create } from 'zustand'
 
+const SELECTED_ACCOUNT_KEY = 'varo:selectedAccountId'
+
+export const getStoredAccountId = () => {
+  try {
+    return localStorage.getItem(SELECTED_ACCOUNT_KEY)
+  } catch {
+    return null
+  }
+}
+
+const storeAccountId = (accountId) => {
+  try {
+    localStorage.setItem(SELECTED_ACCOUNT_KEY, accountId)
+  } catch {
+    // Sin almacenamiento disponible: la selección solo dura la sesión
+  }
+}
+
 /**
  * Store global para manejar autenticación
  */
@@ -34,7 +52,10 @@ export const useAuthStore = create((set, get) => ({
   // Acciones - Cuentas
   setUserAccounts: (accounts) => set({ userAccounts: accounts }),
 
-  setSelectedAccountId: (accountId) => set({ selectedAccountId: accountId }),
+  setSelectedAccountId: (accountId) => {
+    if (accountId) storeAccountId(accountId)
+    set({ selectedAccountId: accountId })
+  },
 
   addUserAccount: (account) => set((state) => ({
     userAccounts: [...state.userAccounts, account],
