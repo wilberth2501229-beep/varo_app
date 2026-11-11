@@ -8,7 +8,7 @@ import {
   toggleScheduledTransaction,
   updateScheduledTransaction as saveScheduledTransaction,
 } from '../services/scheduledTransactionService'
-import { executedScheduledTransactions, getNextOccurrence, toLocalISODate } from '../services/cashFlowService'
+import { executedScheduledTransactions, getNextOccurrence, installmentProgress, toLocalISODate } from '../services/cashFlowService'
 
 // Sin ocurrencias por venir: terminó (por fecha de fin o porque se eliminó conservando su historial)
 const hasEnded = (transaction) => getNextOccurrence(transaction) === null
@@ -16,6 +16,20 @@ const hasEnded = (transaction) => getNextOccurrence(transaction) === null
 function formatNextDate(transaction) {
   const next = getNextOccurrence(transaction)
   return next ? next.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Finalizado'
+}
+
+function InstallmentLine({ transaction }) {
+  const progress = installmentProgress(transaction)
+  if (!progress || progress.total === 0) return null
+  const last = new Date(`${progress.lastDate}T00:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })
+  return (
+    <p className="text-xs text-gray-500 mt-0.5">
+      {progress.paid} de {progress.total} pagos
+      {progress.remaining > 0
+        ? ` · restan $${progress.remainingAmount.toLocaleString('es-MX')} · último pago ${last}`
+        : ' · completado'}
+    </p>
+  )
 }
 
 export default function ScheduledTransactionList() {
@@ -178,6 +192,7 @@ export default function ScheduledTransactionList() {
                 <tr key={transaction.id} className="hover:bg-gray-50 transition">
                   <td className="px-4 py-3">
                     <p className="font-medium">{transaction.description}</p>
+                    <InstallmentLine transaction={transaction} />
                   </td>
                   <td className="px-4 py-3">
                     <p className={`font-bold ${transaction.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>

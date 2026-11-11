@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { useScheduledTransactionStore } from '../store/scheduledTransactionStore'
 import { createScheduledTransaction, updateScheduledTransaction } from '../services/scheduledTransactionService'
-import { toLocalISODate } from '../services/cashFlowService'
+import { nthOccurrenceDate, toLocalISODate } from '../services/cashFlowService'
+import { formatCurrency } from '../utils/utils'
 
 const FREQUENCIES = [
   { value: 'weekly', label: 'Semanal' },
@@ -38,8 +39,22 @@ export default function TransactionScheduler({ onSuccess, editingTransaction = n
     }
   )
 
+  // Duración: recurrente sin fin, por número de pagos (p. ej. un préstamo a 8 meses) o hasta una fecha
+  const [durationMode, setDurationMode] = useState(editingTransaction?.end_date ? 'date' : 'none')
+  const [paymentCount, setPaymentCount] = useState('')
+  const [endDate, setEndDate] = useState(editingTransaction?.end_date ?? '')
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+
+  const count = Math.floor(Number(paymentCount))
+  const lastPaymentISO =
+    durationMode === 'count' && count >= 1 && form.next_due_date
+      ? nthOccurrenceDate(form.frequency, form.next_due_date, count)
+      : durationMode === 'date' && endDate
+        ? endDate
+        : null
+  const totalToPay = durationMode === 'count' && count >= 1 && Number(form.amount) > 0 ? count * Number(form.amount) : null
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -56,11 +71,17 @@ export default function TransactionScheduler({ onSuccess, editingTransaction = n
 
     try {
       const today = toLocalISODate(new Date())
+      if (durationMode !== 'none' && !lastPaymentISO) throw new Error('Indica cuántos pagos o hasta qué fecha')
+      if (lastPaymentISO && lastPaymentISO < form.next_due_date) {
+        throw new Error('La fecha del último pago no puede ser anterior a la primera fecha')
+      }
+
       const payload = {
         ...form,
         account_id: selectedAccountId,
         amount: parseFloat(form.amount),
         start_date: editingTransaction?.start_date || today,
+        end_date: lastPaymentISO,
       }
 
       let result
@@ -82,6 +103,9 @@ export default function TransactionScheduler({ onSuccess, editingTransaction = n
             next_due_date: toLocalISODate(new Date()),
             is_active: true,
           })
+          setDurationMode('none')
+          setPaymentCount('')
+          setEndDate('')
         }
       }
 
@@ -192,6 +216,66 @@ export default function TransactionScheduler({ onSuccess, editingTransaction = n
             />
           </div>
         </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Duración</label>
+            <select
+              value={durationMode}
+              onChange={(e) => setDurationMode(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="none">Sin fin (recurrente)</option>
+              <option value="count">Por número de pagos (p. ej. un préstamo)</option>
+              <option value="date">Hasta una fecha</option>
+            </select>
+          </div>
+
+          {durationMode === 'count' && (
+            <div>
+              <label className="block text-sm font-medium mb-1">Número de pagos</label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={paymentCount}
+                onChange={(e) => setPaymentCount(e.target.value)}
+                required
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="Ej: 8"
+              />
+            </div>
+          )}
+
+          {durationMode === 'date' && (
+            <div>
+              <label className="block text-sm font-medium mb-1">Fecha del último pago</label>
+              <input
+                type="date"
+                min={form.next_due_date}
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                required
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+        </div>
+
+        {durationMode === 'count' && lastPaymentISO && (
+          <p className="text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
+            Último pago:{' '}
+            <strong>
+              {new Date(`${lastPaymentISO}T00:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </strong>
+            {totalToPay !== null && (
+              <>
+                {' '}
+                · Total: <strong>{formatCurrency(totalToPay, 'MXN')}</strong>
+              </>
+            )}
+          </p>
+        )}
 
         <div className="flex items-center">
           <input

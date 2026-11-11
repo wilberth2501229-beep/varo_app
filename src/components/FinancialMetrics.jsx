@@ -137,7 +137,7 @@ export default function FinancialMetrics() {
           <div>
             <h3 className="text-lg mb-1">Proyección mensual</h3>
             <p className="text-xs text-charcoal-500 mb-3">
-              Basada en tus transacciones programadas activas, convertidas a su equivalente mensual.
+              Basada en tus transacciones programadas activas, convertidas a su equivalente mensual. Incluye los compromisos con fin (como un préstamo) mientras estén vigentes; en "Próximos 12 meses" ves cuándo terminan.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <MetricCard

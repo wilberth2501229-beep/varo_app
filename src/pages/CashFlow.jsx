@@ -8,6 +8,7 @@ import { getScheduledTransactions } from '../services/scheduledTransactionServic
 import TransactionScheduler from '../components/TransactionScheduler'
 import CashFlowChart from '../components/CashFlowChart'
 import FinancialMetrics from '../components/FinancialMetrics'
+import ScheduledOutlook from '../components/ScheduledOutlook'
 import NotificationsPanel from '../components/NotificationsPanel'
 import LiquidityThresholdSetting from '../components/LiquidityThresholdSetting'
 import AlertsPanel from '../components/AlertsPanel'
@@ -121,6 +122,8 @@ export default function CashFlow() {
               <h2 className="text-lg sm:text-xl font-bold mb-4">Métricas Financieras</h2>
               <FinancialMetrics />
             </div>
+
+            <ScheduledOutlook />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
               <div className="lg:col-span-2">

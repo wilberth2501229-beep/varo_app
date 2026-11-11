@@ -141,6 +141,53 @@ export function executedScheduledTransactions(scheduled, today = startOfToday())
     )
 }
 
+// Fecha del pago número `n` (1 = la primera fecha) de una serie, para fijar su fin por número de pagos
+export function nthOccurrenceDate(frequency, firstISO, n) {
+  const nth = OCCURRENCE[frequency] ?? OCCURRENCE.monthly
+  return toLocalISODate(nth(parseLocalDate(firstISO), n - 1))
+}
+
+// Avance de un compromiso con fin (p. ej. un préstamo a 8 pagos); null si no tiene fecha de fin
+export function installmentProgress(scheduled, today = startOfToday()) {
+  if (!scheduled.end_date) return null
+  const dates = expandOccurrences(scheduled, parseLocalDate(scheduled.next_due_date), parseLocalDate(scheduled.end_date))
+  const paid = dates.filter((date) => date <= today).length
+  const amount = Number(scheduled.amount)
+  return {
+    total: dates.length,
+    paid,
+    remaining: dates.length - paid,
+    remainingAmount: round2((dates.length - paid) * amount),
+    totalAmount: round2(dates.length * amount),
+    lastDate: dates.length ? toLocalISODate(dates[dates.length - 1]) : null,
+  }
+}
+
+// Programados mes a mes (meses calendario completos desde el actual): ingresos, gastos, neto y qué compromisos terminan
+export function scheduledByMonth(scheduled, today = startOfToday(), months = 12) {
+  const active = scheduled.filter((s) => s.is_active === true)
+  const finite = active
+    .map((s) => ({ description: describe(s), lastDate: installmentProgress(s, today)?.lastDate }))
+    .filter((s) => s.lastDate)
+
+  return Array.from({ length: months }, (_, i) => {
+    const start = new Date(today.getFullYear(), today.getMonth() + i, 1)
+    const end = new Date(today.getFullYear(), today.getMonth() + i + 1, 0)
+    const events = scheduledEvents(active, start, end)
+    const income = events.filter((e) => e.delta > 0).reduce((sum, e) => sum + e.delta, 0)
+    const expenses = events.filter((e) => e.delta < 0).reduce((sum, e) => sum - e.delta, 0)
+    const startISO = toLocalISODate(start)
+    const endISO = toLocalISODate(end)
+    return {
+      month: startISO,
+      income: round2(income),
+      expenses: round2(expenses),
+      net: round2(income - expenses),
+      endings: finite.filter((f) => f.lastDate >= startISO && f.lastDate <= endISO).map((f) => f.description),
+    }
+  })
+}
+
 export function getNextOccurrence(scheduled, from = startOfToday()) {
   return expandOccurrences(scheduled, from, addMonths(from, 13))[0] ?? null
 }
