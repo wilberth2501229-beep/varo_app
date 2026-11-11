@@ -1,8 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '../store/authStore'
+import { useUiStore } from '../store/uiStore'
 import { useScheduledTransactionStore } from '../store/scheduledTransactionStore'
-import { getScheduledTransactions, deleteScheduledTransaction, toggleScheduledTransaction } from '../services/scheduledTransactionService'
-import { getNextOccurrence } from '../services/cashFlowService'
+import {
+  getScheduledTransactions,
+  deleteScheduledTransaction,
+  toggleScheduledTransaction,
+  updateScheduledTransaction as saveScheduledTransaction,
+} from '../services/scheduledTransactionService'
+import { executedScheduledTransactions, getNextOccurrence, toLocalISODate } from '../services/cashFlowService'
+
+// Sin ocurrencias por venir: terminó (por fecha de fin o porque se eliminó conservando su historial)
+const hasEnded = (transaction) => getNextOccurrence(transaction) === null
 
 function formatNextDate(transaction) {
   const next = getNextOccurrence(transaction)
@@ -11,6 +20,7 @@ function formatNextDate(transaction) {
 
 export default function ScheduledTransactionList() {
   const { selectedAccountId } = useAuthStore()
+  const { showSuccess, showError } = useUiStore()
   const { scheduledTransactions, setScheduledTransactions, updateScheduledTransaction, deleteScheduledTransaction: deleteFromStore } = useScheduledTransactionStore()
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState('all') // all, income, expense, active, inactive
@@ -37,17 +47,37 @@ export default function ScheduledTransactionList() {
     }
   }
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('¿Estás seguro de que deseas eliminar esta transacción?')) return
+  // Eliminar cancela lo que está por venir. Lo ya ejecutado es historial: se conserva en el balance y en Transacciones
+  const handleDelete = async (transaction) => {
+    const executed = executedScheduledTransactions([transaction]).length
+    const message =
+      executed > 0
+        ? `¿Eliminar esta transacción programada?\n\nSe cancelan los movimientos por venir. Los ${executed} ya ejecutados se conservan en tu historial y en tu balance.`
+        : '¿Estás seguro de que deseas eliminar esta transacción?'
+    if (!window.confirm(message)) return
 
-    const result = await deleteScheduledTransaction(id)
+    if (executed === 0) {
+      const result = await deleteScheduledTransaction(transaction.id)
+      if (result.success) deleteFromStore(transaction.id)
+      else showError(`Error: ${result.error}`)
+      return
+    }
+
+    const today = toLocalISODate(new Date())
+    const endDate = transaction.end_date && transaction.end_date < today ? transaction.end_date : today
+    const result = await saveScheduledTransaction(transaction.id, { end_date: endDate })
     if (result.success) {
-      deleteFromStore(id)
+      updateScheduledTransaction(transaction.id, { end_date: endDate })
+      showSuccess('Eliminada. Los movimientos ya ejecutados se conservan en tu historial')
+    } else {
+      showError(`Error: ${result.error}`)
     }
   }
 
   const getFilteredTransactions = () => {
     return scheduledTransactions.filter((t) => {
+      // Las finalizadas solo se ven en su filtro: siguen contando como historial, pero ya no son programadas
+      if ((filter === 'ended') !== hasEnded(t)) return false
       switch (filter) {
         case 'income':
           return t.type === 'income'
@@ -108,6 +138,7 @@ export default function ScheduledTransactionList() {
             { id: 'expense', label: '💸 Gastos' },
             { id: 'active', label: '✅ Activas' },
             { id: 'inactive', label: '⏸️ Inactivas' },
+            { id: 'ended', label: '🏁 Finalizadas' },
           ].map((f) => (
             <button
               key={f.id}
@@ -177,22 +208,27 @@ export default function ScheduledTransactionList() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-center gap-2">
-                      <button
-                        onClick={() => handleToggle(transaction.id, transaction.is_active)}
-                        className={`px-2 py-1 text-xs rounded transition ${
-                          transaction.is_active
-                            ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
-                            : 'bg-green-100 text-green-700 hover:bg-green-200'
-                        }`}
-                      >
-                        {transaction.is_active ? '⏸️ Pausar' : '▶️ Reanudar'}
-                      </button>
-                      <button
-                        onClick={() => handleDelete(transaction.id)}
-                        className="px-2 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded text-xs transition"
-                      >
-                        🗑️ Eliminar
-                      </button>
+                      {!hasEnded(transaction) && (
+                        <button
+                          onClick={() => handleToggle(transaction.id, transaction.is_active)}
+                          className={`px-2 py-1 text-xs rounded transition ${
+                            transaction.is_active
+                              ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                              : 'bg-green-100 text-green-700 hover:bg-green-200'
+                          }`}
+                        >
+                          {transaction.is_active ? '⏸️ Pausar' : '▶️ Reanudar'}
+                        </button>
+                      )}
+                      {!hasEnded(transaction) && (
+                        <button
+                          onClick={() => handleDelete(transaction)}
+                          className="px-2 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded text-xs transition"
+                        >
+                          🗑️ Eliminar
+                        </button>
+                      )}
+                      {hasEnded(transaction) && <span className="text-xs text-gray-400">Su historial se conserva</span>}
                     </div>
                   </td>
                 </tr>

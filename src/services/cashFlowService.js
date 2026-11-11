@@ -394,8 +394,10 @@ export async function getFinancialMetrics(accountId, period = 'month') {
     const avgMonthlyExpenses = expenses / monthsWithData
     const netFlow = income - expenses
 
-    const fixedMonthlyIncome = sumBy(scheduled, 'income', (s) => toMonthlyAmount(s.amount, s.frequency))
-    const fixedMonthlyExpenses = sumBy(scheduled, 'expense', (s) => toMonthlyAmount(s.amount, s.frequency))
+    // Los ya finalizados dejaron historial (cuenta en lo realizado) pero no son un compromiso mensual vigente
+    const ongoing = scheduled.filter((s) => getNextOccurrence(s, today) !== null)
+    const fixedMonthlyIncome = sumBy(ongoing, 'income', (s) => toMonthlyAmount(s.amount, s.frequency))
+    const fixedMonthlyExpenses = sumBy(ongoing, 'expense', (s) => toMonthlyAmount(s.amount, s.frequency))
 
     // Base de ingreso para el ratio: lo esperado por programados; si no hay, el promedio real
     const incomeBase = fixedMonthlyIncome > 0 ? fixedMonthlyIncome : avgMonthlyIncome
