@@ -9,6 +9,7 @@ import TransactionScheduler from '../components/TransactionScheduler'
 import CashFlowChart from '../components/CashFlowChart'
 import FinancialMetrics from '../components/FinancialMetrics'
 import ScheduledOutlook from '../components/ScheduledOutlook'
+import AIAnalysis from '../components/AIAnalysis'
 import NotificationsPanel from '../components/NotificationsPanel'
 import LiquidityThresholdSetting from '../components/LiquidityThresholdSetting'
 import AlertsPanel from '../components/AlertsPanel'
@@ -93,6 +94,7 @@ export default function CashFlow() {
               { id: 'overview', label: '📊 Resumen', icon: '📊' },
               { id: 'projections', label: '📈 Proyecciones', icon: '📈' },
               { id: 'transactions', label: '📅 Programadas', icon: '📅' },
+              { id: 'analysis', label: '🤖 Análisis', icon: '🤖' },
               { id: 'alerts', label: '⚠️ Alertas', icon: '⚠️' },
               { id: 'settings', label: '⚙️ Configuración', icon: '⚙️' },
             ].map((tab) => (
@@ -135,6 +137,9 @@ export default function CashFlow() {
             </div>
           </div>
         )}
+
+        {/* Analysis Tab */}
+        {activeTab === 'analysis' && <AIAnalysis />}
 
         {/* Projections Tab */}
         {activeTab === 'projections' && (
