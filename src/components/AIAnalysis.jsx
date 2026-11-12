@@ -4,7 +4,7 @@ import { useCashFlowStore } from '../store/cashFlowStore'
 import { useScheduledTransactionStore } from '../store/scheduledTransactionStore'
 import { usePostedTransactions } from '../hooks/usePostedTransactions'
 import { getFinancialMetrics } from '../services/cashFlowService'
-import { buildAnalysisContext, requestAnalysis } from '../services/analysisService'
+import { buildAnalysisContext, formatSummaryForChat, requestAnalysis } from '../services/analysisService'
 
 const SUGGESTIONS = [
   { label: 'Análisis general', question: '' },
@@ -63,24 +63,45 @@ export default function AIAnalysis() {
 
   const ready = Boolean(cash.lastUpdated && selectedAccountId)
 
-  const run = async (text) => {
-    if (!ready || status === 'loading') return
-    setStatus('loading')
-    setError('')
-    setAsked(text)
+  const [copyState, setCopyState] = useState('idle') // idle | working | copied | manual
+  const [manualText, setManualText] = useState('')
 
+  const gatherContext = async () => {
     const [month, quarter] = await Promise.all([
       getFinancialMetrics(selectedAccountId, 'month'),
       getFinancialMetrics(selectedAccountId, 3),
     ])
-    const context = buildAnalysisContext({
+    return buildAnalysisContext({
       today: new Date(),
       cash,
       scheduled,
       posted,
       metrics: { month: month.data, quarter: quarter.data },
     })
+  }
 
+  // Alternativa sin la API: copia el mismo resumen para pegarlo en una conversación con Claude
+  const copySummary = async () => {
+    if (!ready || copyState === 'working') return
+    setCopyState('working')
+    const text = formatSummaryForChat(await gatherContext(), question)
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopyState('copied')
+      setTimeout(() => setCopyState('idle'), 3000)
+    } catch {
+      setManualText(text)
+      setCopyState('manual')
+    }
+  }
+
+  const run = async (text) => {
+    if (!ready || status === 'loading') return
+    setStatus('loading')
+    setError('')
+    setAsked(text)
+
+    const context = await gatherContext()
     const result = await requestAnalysis({ context, question: text })
     if (result.success) {
       setAnalysis(result.analysis)
@@ -139,7 +160,33 @@ export default function AIAnalysis() {
           >
             {status === 'loading' ? 'Analizando…' : 'Analizar'}
           </button>
+          <button
+            type="button"
+            onClick={copySummary}
+            disabled={!ready || copyState === 'working'}
+            className="px-4 py-2 rounded-lg border border-bronze-300 text-charcoal-600 hover:bg-cream-200 disabled:opacity-50 whitespace-nowrap"
+          >
+            {copyState === 'copied' ? 'Copiado ✓' : 'Copiar resumen'}
+          </button>
         </form>
+
+        {copyState === 'copied' && (
+          <p className="text-sm text-forest-700">
+            Resumen copiado. Pégalo en una conversación con Claude para que lo analice, sin usar la API.
+          </p>
+        )}
+        {copyState === 'manual' && (
+          <div className="space-y-1">
+            <p className="text-sm text-charcoal-600">Tu navegador bloqueó el copiado. Selecciona todo el texto y cópialo:</p>
+            <textarea
+              readOnly
+              value={manualText}
+              rows={6}
+              onFocus={(e) => e.target.select()}
+              className="w-full px-3 py-2 border border-bronze-300 rounded-lg bg-white text-xs font-mono"
+            />
+          </div>
+        )}
 
         {!ready && <p className="text-sm text-charcoal-500">Calculando tu flujo de caja…</p>}
 

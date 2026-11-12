@@ -8,7 +8,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 
-const MODEL = 'claude-opus-5-5'
+const MODEL = 'claude-sonnet-5-5'
 const MAX_CONTEXT_CHARS = 40000
 const MAX_QUESTION_CHARS = 500
 

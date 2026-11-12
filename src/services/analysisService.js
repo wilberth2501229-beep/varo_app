@@ -123,6 +123,16 @@ export function buildAnalysisContext({ today, cash, scheduled, posted, metrics }
   }
 }
 
+// Texto listo para pegar en una conversación con Claude (sin usar la API)
+export function formatSummaryForChat(context, question) {
+  const ask = question?.trim() || 'Haz un análisis general de mi flujo de caja: qué tan sano está, riesgos y qué haría.'
+  return [
+    'Analiza mi flujo de caja de Varo (pesos mexicanos). Basa tu respuesta solo en estos datos, cita montos y fechas concretas, y dime riesgos y qué haría.',
+    `Mi pregunta: ${ask}`,
+    `<datos>\n${JSON.stringify(context)}\n</datos>`,
+  ].join('\n\n')
+}
+
 export async function requestAnalysis({ context, question }) {
   const { data } = await supabase.auth.getSession()
   const token = data?.session?.access_token
