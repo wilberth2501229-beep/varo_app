@@ -5,6 +5,8 @@ import { useScheduledTransactionStore } from '../store/scheduledTransactionStore
 import { useTransactionStore } from '../store/transactionStore'
 import { formatCurrency } from '../utils/utils'
 import { calculateCashFlowProjection, toLocalISODate } from '../services/cashFlowService'
+import { setOccurrenceOverride } from '../services/scheduledTransactionService'
+import OccurrenceEditor from './OccurrenceEditor'
 
 const PERIODS = [
   { value: 'month', label: 'Próximo mes' },
@@ -69,7 +71,7 @@ function SummaryItem({ label, value, detail, danger }) {
   )
 }
 
-function PointTooltip({ point, chartWidth, criticalBalance, todayISO, live }) {
+function PointTooltip({ point, chartWidth, criticalBalance, todayISO, live, canAdjust }) {
   // Se centra sobre el punto sin salirse de la gráfica; si el punto está muy arriba, se muestra debajo
   const left = Math.min(Math.max(point.cx - TOOLTIP_WIDTH / 2, 0), chartWidth - TOOLTIP_WIDTH)
   const above = point.cy > 130
@@ -117,6 +119,15 @@ function PointTooltip({ point, chartWidth, criticalBalance, todayISO, live }) {
           {belowThreshold && (
             <p className="text-xs text-burgundy-700 mt-1">Queda bajo tu umbral de {money(criticalBalance)}</p>
           )}
+          {point.adjusted && (
+            <p className="text-xs text-gold-700 mt-1">
+              Ajustado · original del {shortDate(point.originalDate)}
+              {point.amount !== point.baseAmount && ` por ${money(point.baseAmount)}`}
+            </p>
+          )}
+          {canAdjust && point.source === 'scheduled' && (
+            <p className="text-xs text-charcoal-500 mt-1">Clic para ajustar la fecha o el monto de este pago</p>
+          )}
         </>
       )}
     </div>
@@ -141,12 +152,16 @@ export default function CashFlowChart() {
   const [period, setPeriod] = useState('quarter')
   const [showAll, setShowAll] = useState(false)
   const [active, setActive] = useState(null)
+  const [editing, setEditing] = useState(null)
+  const [notice, setNotice] = useState(null)
+  const [pointerKind, setPointerKind] = useState('mouse')
   const [asOf, setAsOf] = useState(null)
   const [past, setPast] = useState(null)
   const [chartRef, containerWidth] = useContainerWidth()
   const selectedAccountId = useAuthStore((state) => state.selectedAccountId)
   const transactions = useTransactionStore((state) => state.transactions)
   const scheduledTransactions = useScheduledTransactionStore((state) => state.scheduledTransactions)
+  const updateScheduled = useScheduledTransactionStore((state) => state.updateScheduledTransaction)
   const store = useCashFlowStore()
 
   const today = new Date()
@@ -175,6 +190,38 @@ export default function CashFlowChart() {
     setAsOf(iso && iso < todayISO ? iso : null)
     setActive(null)
     setShowAll(false)
+    setEditing(null)
+  }
+
+  const openEditor = (event) => {
+    setEditing(event)
+    setNotice(null)
+  }
+
+  const handleSaved = ({ scheduledId, originalDate, previous, change }) => {
+    const name = editing?.description ?? 'el pago'
+    setEditing(null)
+    setActive(null)
+    setNotice({
+      scheduledId,
+      originalDate,
+      previous,
+      text: change
+        ? `Ajuste guardado: «${name}» queda el ${shortDate(change.date)} por ${money(change.amount)}. Los demás pagos no cambian.`
+        : `Listo: el pago de «${name}» del ${shortDate(originalDate)} volvió a su fecha y monto originales.`,
+    })
+  }
+
+  const undoAdjustment = async () => {
+    const scheduled = scheduledTransactions.find((t) => t.id === notice.scheduledId)
+    if (!scheduled) return
+    const result = await setOccurrenceOverride(scheduled, notice.originalDate, notice.previous)
+    if (result.success) {
+      updateScheduled(scheduled.id, { overrides: result.overrides })
+      setNotice({ text: 'Se deshizo el ajuste.' })
+    } else {
+      setNotice({ ...notice, text: `No se pudo deshacer: ${result.error}` })
+    }
   }
   const W = containerWidth || 800
   const H = W < 500 ? 240 : 320
@@ -311,6 +358,7 @@ export default function CashFlowChart() {
 
   // Toma el punto más cercano al cursor (o al dedo) para no exigir atinarle a un círculo de 7px
   const pickPoint = (evt) => {
+    if (evt.pointerType && evt.pointerType !== pointerKind) setPointerKind(evt.pointerType)
     const rect = evt.currentTarget.getBoundingClientRect()
     const px = evt.clientX - rect.left
     const py = evt.clientY - rect.top
@@ -384,6 +432,10 @@ export default function CashFlowChart() {
           aria-label="Gráfica de saldo proyectado con cada movimiento"
           onPointerMove={pickPoint}
           onPointerDown={pickPoint}
+          onClick={() => {
+            // En celular el toque solo muestra el detalle; se ajusta con el botón de la lista
+            if (pointerKind !== 'touch' && activePoint?.source === 'scheduled') openEditor(activePoint)
+          }}
           onPointerLeave={(evt) => evt.pointerType === 'mouse' && setActive(null)}
         >
           {/* Zona bajo el umbral */}
@@ -459,9 +511,41 @@ export default function CashFlowChart() {
         </svg>
 
         {activePoint && (
-          <PointTooltip point={activePoint} chartWidth={W} criticalBalance={criticalBalance} todayISO={todayISO} live={live} />
+          <PointTooltip
+            point={activePoint}
+            chartWidth={W}
+            criticalBalance={criticalBalance}
+            todayISO={todayISO}
+            live={live}
+            canAdjust={pointerKind !== 'touch'}
+          />
         )}
       </div>
+
+      {editing && (
+        <OccurrenceEditor
+          key={`${editing.scheduledId}-${editing.originalDate}`}
+          occurrence={editing}
+          onClose={() => setEditing(null)}
+          onSaved={handleSaved}
+        />
+      )}
+
+      {notice && !editing && (
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-forest-50 border border-forest-200 text-forest-800 rounded-lg px-3 py-2 text-sm">
+          <span>{notice.text}</span>
+          <span className="flex gap-3">
+            {notice.scheduledId && (
+              <button onClick={undoAdjustment} className="font-medium underline">
+                Deshacer
+              </button>
+            )}
+            <button onClick={() => setNotice(null)} aria-label="Cerrar aviso" className="text-forest-700">
+              ✕
+            </button>
+          </span>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-charcoal-500">
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-forest-700" /> Ingreso</span>
@@ -484,7 +568,16 @@ export default function CashFlowChart() {
                     <p className="text-xs text-charcoal-500">
                       {e.date === todayISO ? 'Hoy' : shortDate(e.date)} · {e.source === 'registered' ? 'Registrado' : 'Programado'}
                       {!live && e.date > todayISO && ' · Proyección'}
+                      {e.adjusted && ' · ajustado'}
                     </p>
+                    {e.source === 'scheduled' && (
+                      <button
+                        onClick={() => openEditor(e)}
+                        className="text-xs text-gold-700 hover:text-gold-800 font-medium mt-0.5"
+                      >
+                        Ajustar este pago
+                      </button>
+                    )}
                   </div>
                   <div className="text-right shrink-0 tabular">
                     <p className={e.type === 'income' ? 'text-forest-700' : 'text-burgundy-700'}>{signedMoney(e.delta)}</p>

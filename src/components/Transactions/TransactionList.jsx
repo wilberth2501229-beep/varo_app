@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { useTransactionStore } from '../../store/transactionStore'
 import { useUiStore } from '../../store/uiStore'
 import { useExecutedScheduled } from '../../hooks/usePostedTransactions'
+import { useScheduledTransactionStore } from '../../store/scheduledTransactionStore'
+import { setOccurrenceOverride } from '../../services/scheduledTransactionService'
 import { formatCurrency, formatDate, getTransactionColor } from '../../utils/utils'
 import { toLocalISODate } from '../../services/cashFlowService'
 import * as transactionService from '../../services/transactionService'
@@ -21,6 +23,7 @@ const CATEGORIES = [
 
 export default function TransactionList() {
   const { transactions: registered, deleteTransaction } = useTransactionStore()
+  const { scheduledTransactions, updateScheduledTransaction } = useScheduledTransactionStore()
   const executedScheduled = useExecutedScheduled()
   const transactions = useMemo(() => [...registered, ...executedScheduled], [registered, executedScheduled])
   const { showSuccess, showError } = useUiStore()
@@ -42,6 +45,20 @@ export default function TransactionList() {
       if (sortBy === 'amount-asc') return a.amount - b.amount
       return 0
     })
+
+  // Regresa un pago programado ajustado (fecha o monto) a lo original; los demás pagos no cambian
+  const handleUndoAdjustment = async (row) => {
+    const scheduled = scheduledTransactions.find((s) => s.id === row.scheduled_id)
+    if (!scheduled) return
+    if (!confirm(`¿Regresar este pago a su fecha (${formatDate(row.original_date)}) y monto originales?`)) return
+    const result = await setOccurrenceOverride(scheduled, row.original_date, null)
+    if (result.success) {
+      updateScheduledTransaction(scheduled.id, { overrides: result.overrides })
+      showSuccess('Ajuste deshecho')
+    } else {
+      showError(`❌ Error: ${result.error}`)
+    }
+  }
 
   const handleDelete = async (id) => {
     if (!confirm('¿Estás seguro de que quieres eliminar esta transacción?')) return
@@ -160,9 +177,13 @@ export default function TransactionList() {
                     {transaction.source === 'scheduled' && (
                       <span
                         className="ml-2 px-2 py-0.5 rounded-full text-xs bg-bronze-100 text-bronze-800"
-                        title="Se ejecutó automáticamente según tu programación y ya cuenta en tu balance"
+                        title={
+                          transaction.adjusted
+                            ? `Pago programado del ${formatDate(transaction.original_date)}, ajustado en fecha o monto`
+                            : 'Se ejecutó automáticamente según tu programación y ya cuenta en tu balance'
+                        }
                       >
-                        Programada
+                        {transaction.adjusted ? 'Programada · ajustada' : 'Programada'}
                       </span>
                     )}
                   </td>
@@ -173,7 +194,14 @@ export default function TransactionList() {
                     {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount, 'MXN')}
                   </td>
                   <td className="px-6 py-4 text-sm text-center">
-                    {transaction.source === 'scheduled' ? (
+                    {transaction.source === 'scheduled' && transaction.adjusted ? (
+                      <button
+                        onClick={() => handleUndoAdjustment(transaction)}
+                        className="text-xs text-gold-700 hover:text-gold-800 font-medium"
+                      >
+                        Deshacer ajuste
+                      </button>
+                    ) : transaction.source === 'scheduled' ? (
                       <span className="text-xs text-gray-400">Se gestiona en Flujo de Caja</span>
                     ) : (
                       <button

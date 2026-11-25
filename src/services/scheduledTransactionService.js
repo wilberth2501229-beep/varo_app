@@ -121,3 +121,15 @@ export async function toggleScheduledTransaction(id, isActive) {
     return { success: false, error: error.message }
   }
 }
+
+// Ajusta un solo pago de la serie (identificado por su fecha original) sin tocar los demás.
+// `change` = { date, amount } reales; null (o igual al original) quita el ajuste.
+export async function setOccurrenceOverride(scheduled, originalDate, change) {
+  const overrides = { ...(scheduled.overrides ?? {}) }
+  const isOriginal = !change || (change.date === originalDate && Number(change.amount) === Number(scheduled.amount))
+  if (isOriginal) delete overrides[originalDate]
+  else overrides[originalDate] = { date: change.date, amount: Number(change.amount) }
+
+  const result = await updateScheduledTransaction(scheduled.id, { overrides })
+  return result.success ? { success: true, overrides } : result
+}

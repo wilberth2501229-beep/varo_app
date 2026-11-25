@@ -99,6 +99,39 @@ function countedSince(scheduled) {
 
 const signedAmount = (item) => (item.type === 'income' ? Number(item.amount) : -Number(item.amount))
 
+const FAR_FUTURE = new Date(9999, 0, 1)
+const daysBetween = (fromISO, toISO) => Math.round((parseLocalDate(toISO) - parseLocalDate(fromISO)) / 86400000)
+
+// Ocurrencias de una serie con sus ajustes puntuales aplicados. `overrides` guarda, por fecha original
+// ("YYYY-MM-DD"), la fecha y el monto reales de ese pago (p. ej. la quincena del 30 llegó el 24 y fue mayor);
+// el resto de la serie no cambia. `from`/`to` filtran por la fecha real; `naturalFrom` limita las fechas originales.
+function occurrences(scheduled, { from = null, to, naturalFrom = null }) {
+  const overrides = scheduled.overrides && typeof scheduled.overrides === 'object' ? scheduled.overrides : {}
+  // Margen para no perder pagos que el ajuste metió o sacó del rango
+  const shift = Object.entries(overrides).reduce(
+    (max, [original, o]) => (o?.date ? Math.max(max, Math.abs(daysBetween(original, o.date))) : max),
+    0
+  )
+  const lowerFromRange = from ? addDays(from, -shift) : null
+  const lower = [naturalFrom, lowerFromRange].filter(Boolean).reduce((a, b) => (a > b ? a : b), new Date(0))
+  const baseAmount = Number(scheduled.amount)
+
+  return expandOccurrences(scheduled, lower, addDays(to, shift))
+    .map((natural) => {
+      const originalDate = toLocalISODate(natural)
+      const o = overrides[originalDate]
+      return {
+        date: o?.date ? parseLocalDate(o.date) : natural,
+        originalDate,
+        amount: o?.amount != null ? Number(o.amount) : baseAmount,
+        baseAmount,
+        adjusted: Boolean(o),
+      }
+    })
+    .filter((occ) => (!from || occ.date >= from) && occ.date <= to)
+    .sort((a, b) => a.date - b.date)
+}
+
 function describe(scheduled) {
   return scheduled.description || scheduled.category || (scheduled.type === 'income' ? 'Ingreso programado' : 'Gasto programado')
 }
@@ -106,16 +139,19 @@ function describe(scheduled) {
 // Movimientos de programados entre `from` (opcional) y `to`, ordenados por fecha
 function scheduledEvents(scheduled, from, to) {
   return scheduled
-    .flatMap((s) => {
-      const since = countedSince(s)
-      const start = from && from > since ? from : since
-      return expandOccurrences(s, start, to).map((date) => ({
-        date,
-        delta: signedAmount(s),
+    .flatMap((s) =>
+      occurrences(s, { from, to, naturalFrom: countedSince(s) }).map((occ) => ({
+        date: occ.date,
+        delta: signedAmount({ type: s.type, amount: occ.amount }),
         type: s.type,
         description: describe(s),
+        scheduledId: s.id,
+        originalDate: occ.originalDate,
+        amount: occ.amount,
+        baseAmount: occ.baseAmount,
+        adjusted: occ.adjusted,
       }))
-    })
+    )
     .sort((a, b) => a.date - b.date)
 }
 
@@ -125,19 +161,19 @@ export function executedScheduledTransactions(scheduled, today = startOfToday())
   return scheduled
     .filter((s) => s.is_active === true)
     .flatMap((s) =>
-      expandOccurrences(s, countedSince(s), today).map((date) => {
-        const iso = toLocalISODate(date)
-        return {
-          id: `scheduled-${s.id}-${iso}`,
-          account_id: s.account_id,
-          type: s.type,
-          amount: Number(s.amount),
-          category: s.category,
-          description: describe(s),
-          transaction_date: iso,
-          source: 'scheduled',
-        }
-      })
+      occurrences(s, { to: today, naturalFrom: countedSince(s) }).map((occ) => ({
+        id: `scheduled-${s.id}-${occ.originalDate}`,
+        scheduled_id: s.id,
+        account_id: s.account_id,
+        type: s.type,
+        amount: occ.amount,
+        category: s.category,
+        description: describe(s),
+        transaction_date: toLocalISODate(occ.date),
+        original_date: occ.originalDate,
+        adjusted: occ.adjusted,
+        source: 'scheduled',
+      }))
     )
 }
 
@@ -150,16 +186,16 @@ export function nthOccurrenceDate(frequency, firstISO, n) {
 // Avance de un compromiso con fin (p. ej. un préstamo a 8 pagos); null si no tiene fecha de fin
 export function installmentProgress(scheduled, today = startOfToday()) {
   if (!scheduled.end_date) return null
-  const dates = expandOccurrences(scheduled, parseLocalDate(scheduled.next_due_date), parseLocalDate(scheduled.end_date))
-  const paid = dates.filter((date) => date <= today).length
-  const amount = Number(scheduled.amount)
+  const all = occurrences(scheduled, { to: FAR_FUTURE, naturalFrom: parseLocalDate(scheduled.next_due_date) })
+  const pending = all.filter((occ) => occ.date > today)
+  const sum = (list) => round2(list.reduce((total, occ) => total + occ.amount, 0))
   return {
-    total: dates.length,
-    paid,
-    remaining: dates.length - paid,
-    remainingAmount: round2((dates.length - paid) * amount),
-    totalAmount: round2(dates.length * amount),
-    lastDate: dates.length ? toLocalISODate(dates[dates.length - 1]) : null,
+    total: all.length,
+    paid: all.length - pending.length,
+    remaining: pending.length,
+    remainingAmount: sum(pending),
+    totalAmount: sum(all),
+    lastDate: all.length ? toLocalISODate(all[all.length - 1].date) : null,
   }
 }
 
@@ -189,7 +225,7 @@ export function scheduledByMonth(scheduled, today = startOfToday(), months = 12)
 }
 
 export function getNextOccurrence(scheduled, from = startOfToday()) {
-  return expandOccurrences(scheduled, from, addMonths(from, 13))[0] ?? null
+  return occurrences(scheduled, { from, to: addMonths(from, 13) })[0]?.date ?? null
 }
 
 const round2 = (n) => Math.round(n * 100) / 100
@@ -277,7 +313,7 @@ export function buildCashFlowTimeline({ transactions, scheduled, criticalBalance
   }
 }
 
-const SCHEDULED_FIELDS = 'type, amount, frequency, next_due_date, end_date, start_date, description, category'
+const SCHEDULED_FIELDS = 'id, type, amount, frequency, next_due_date, end_date, start_date, description, category, overrides'
 
 async function fetchActiveScheduled(accountId) {
   const { data, error } = await supabase

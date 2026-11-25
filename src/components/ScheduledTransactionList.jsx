@@ -63,7 +63,8 @@ export default function ScheduledTransactionList() {
 
   // Eliminar cancela lo que está por venir. Lo ya ejecutado es historial: se conserva en el balance y en Transacciones
   const handleDelete = async (transaction) => {
-    const executed = executedScheduledTransactions([transaction]).length
+    const executedRows = executedScheduledTransactions([transaction])
+    const executed = executedRows.length
     const message =
       executed > 0
         ? `¿Eliminar esta transacción programada?\n\nSe cancelan los movimientos por venir. Los ${executed} ya ejecutados se conservan en tu historial y en tu balance.`
@@ -77,8 +78,10 @@ export default function ScheduledTransactionList() {
       return
     }
 
+    // Un pago adelantado ya cobrado (p. ej. el del 30 que llegó el 24) sigue teniendo su fecha original en la serie
     const today = toLocalISODate(new Date())
-    const endDate = transaction.end_date && transaction.end_date < today ? transaction.end_date : today
+    const keepUntil = executedRows.reduce((latest, row) => (row.original_date > latest ? row.original_date : latest), today)
+    const endDate = transaction.end_date && transaction.end_date < keepUntil ? transaction.end_date : keepUntil
     const result = await saveScheduledTransaction(transaction.id, { end_date: endDate })
     if (result.success) {
       updateScheduledTransaction(transaction.id, { end_date: endDate })
